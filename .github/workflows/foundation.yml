@@ -1,4 +1,4 @@
-name: Foundation checks and Android test APK
+name: Foundation Web checks
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  verify-and-build:
+  verify-web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,27 +24,3 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npx cap sync android
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Install Android 35 SDK
-        run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
-          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - run: ./gradlew --no-daemon assembleDebug
-        working-directory: android
-      - name: Write APK provenance
-        run: |
-          printf 'Commit: %s\nPackage: com.lifespace.foundation.test\nVersion: 0.1.0-test.1 (1)\nBuild: debug\n' "$(git rev-parse HEAD)" > android/app/build/outputs/apk/debug/BUILD-INFO.txt
-          sha256sum android/app/build/outputs/apk/debug/app-debug.apk >> android/app/build/outputs/apk/debug/BUILD-INFO.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: life-space-foundation-test-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/apk/debug/BUILD-INFO.txt
-          if-no-files-found: error
-          retention-days: 14
