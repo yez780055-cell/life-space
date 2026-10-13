@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.npm/
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.tsbuildinfo
