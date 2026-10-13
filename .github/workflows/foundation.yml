@@ -29,7 +29,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Install Android 35 SDK
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
       - run: ./gradlew --no-daemon assembleDebug
         working-directory: android
       - name: Write APK provenance
