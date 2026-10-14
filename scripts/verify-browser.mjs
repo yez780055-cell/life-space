@@ -102,9 +102,10 @@ try {
     await desktopPage.getByRole('button', { name: '下一个周期' }).click();
     savedTaskButton = desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' });
   }
-  await savedTaskButton.waitFor();
-  await savedTaskButton.locator('.todo-task-tags').getByText('个人').waitFor();
-  await savedTaskButton.click();
+  const savedTaskRow = desktopPage.locator('.todo-task-row').filter({ hasText: '视觉预览任务' });
+  await savedTaskRow.waitFor();
+  await savedTaskRow.locator('.todo-task-tags').getByText('个人').waitFor();
+  await savedTaskRow.getByRole('button', { name: '编辑任务：视觉预览任务' }).click();
   await desktopPage.getByLabel('开启提醒').waitFor();
   if (!(await desktopPage.locator('#todo-reminder').isChecked())) throw new Error('Reminder setting did not persist after editing');
   if (await desktopPage.locator('.todo-form-field:has(#todo-reminder) select').inputValue() !== '30') throw new Error('Reminder lead time did not persist after editing');
