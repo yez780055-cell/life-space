@@ -97,6 +97,8 @@ try {
   await page.goBack();
   await page.getByRole('heading', { name: '完成的时光' }).waitFor();
   await page.goBack();
+  await waitForSpace(page, 'couple');
+  await page.goBack();
   await waitForSpace(page, 'personal');
   await page.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(page, 'couple');
