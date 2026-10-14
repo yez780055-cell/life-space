@@ -1,5 +1,7 @@
 export const DB_NAME = 'life-space';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
+
+export type StoreName = 'settings' | 'modules' | 'todoTasks' | 'todoTags' | 'todoOccurrences';
 
 let connection: Promise<IDBDatabase> | undefined;
 
@@ -12,6 +14,16 @@ export function openDatabase(): Promise<IDBDatabase> {
       const db = request.result;
       if (event.oldVersion < 1) db.createObjectStore('settings');
       if (event.oldVersion < 2) db.createObjectStore('modules');
+      if (event.oldVersion < 3) {
+        const tasks = db.createObjectStore('todoTasks', { keyPath: 'id' });
+        tasks.createIndex('scheduledDate', 'scheduledDate', { unique: false });
+        tasks.createIndex('seriesId', 'seriesId', { unique: false });
+        const tags = db.createObjectStore('todoTags', { keyPath: 'id' });
+        tags.createIndex('normalizedName', 'normalizedName', { unique: true });
+        const occurrences = db.createObjectStore('todoOccurrences', { keyPath: 'key' });
+        occurrences.createIndex('taskId', 'taskId', { unique: false });
+        occurrences.createIndex('scheduledDate', 'scheduledDate', { unique: false });
+      }
     };
     request.onsuccess = () => {
       const db = request.result;
@@ -30,7 +42,7 @@ export function resetDatabaseConnectionForTests() {
   connection = undefined;
 }
 
-export async function readValue<T>(store: 'settings' | 'modules', key: string): Promise<T | undefined> {
+export async function readValue<T>(store: StoreName, key: string): Promise<T | undefined> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const request = db.transaction(store, 'readonly').objectStore(store).get(key);
@@ -39,7 +51,7 @@ export async function readValue<T>(store: 'settings' | 'modules', key: string): 
   });
 }
 
-export async function writeValue<T>(store: 'settings' | 'modules', key: string, value: T): Promise<void> {
+export async function writeValue<T>(store: StoreName, key: string, value: T): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, 'readwrite');

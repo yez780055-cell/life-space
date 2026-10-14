@@ -1,4 +1,4 @@
-/* global process, navigator, console, URL, document, fetch, window, indexedDB */
+/* global process, navigator, console, URL, document, fetch, window, indexedDB, Touch, TouchEvent */
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 
@@ -15,7 +15,7 @@ async function waitForSpace(page, space) {
 async function waitForSavedModule(page, module) {
   await page.waitForFunction(async (expected) => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('life-space', 2);
+      const request = indexedDB.open('life-space', 3);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -29,6 +29,16 @@ async function waitForSavedModule(page, module) {
       database.close();
     }
   }, module, { timeout: 5000, polling: 100 });
+}
+
+async function swipe(page, selector, fromX, fromY, toX, toY) {
+  await page.locator(selector).evaluate((element, point) => {
+    const makeTouch = (x, y) => new Touch({ identifier: 1, target: element, clientX: x, clientY: y });
+    const start = makeTouch(point.fromX, point.fromY);
+    const end = makeTouch(point.toX, point.toY);
+    element.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [start], changedTouches: [start] }));
+    element.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [end] }));
+  }, { fromX, fromY, toX, toY });
 }
 
 try {
@@ -68,8 +78,47 @@ try {
   await quickDialog.waitFor();
   await quickDialog.getByRole('textbox', { name: '任务标题' }).fill('视觉预览任务');
   await quickDialog.getByRole('button', { name: '保存' }).click();
-  await desktopPage.getByRole('status').filter({ hasText: '尚未保存' }).waitFor();
-  await quickDialog.getByRole('button', { name: '关闭' }).click();
+  await desktopPage.getByRole('status').filter({ hasText: '已保存到收集箱' }).waitFor();
+  await quickDialog.waitFor({ state: 'hidden' });
+  await desktopPage.getByRole('button', { name: /收集箱/ }).click();
+  await desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' }).click();
+  await desktopPage.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
+  const desktopDate = await desktopPage.evaluate(() => {
+    const date = new Date(); date.setDate(date.getDate() + 2);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
+  await desktopPage.getByLabel('任务日期').fill(desktopDate);
+  await desktopPage.getByLabel('具体时间').fill('19:30');
+  await desktopPage.getByLabel('备注').fill('Playwright 持久化验证');
+  await desktopPage.getByLabel('新标签名称').fill('个人');
+  await desktopPage.getByRole('button', { name: '添加标签' }).click();
+  await desktopPage.locator('#todo-reminder').check();
+  await desktopPage.locator('.todo-form-field:has(#todo-reminder) select').selectOption('30');
+  await desktopPage.getByRole('button', { name: '保存' }).click();
+  await desktopPage.getByRole('status').filter({ hasText: '任务已保存' }).waitFor();
+  await desktopPage.getByRole('tab', { name: '本周' }).click();
+  let savedTaskButton = desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' });
+  if (await savedTaskButton.count() === 0) {
+    await desktopPage.getByRole('button', { name: '下一个周期' }).click();
+    savedTaskButton = desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' });
+  }
+  await savedTaskButton.waitFor();
+  await savedTaskButton.locator('.todo-task-tags').getByText('个人').waitFor();
+  await savedTaskButton.click();
+  await desktopPage.getByLabel('开启提醒').waitFor();
+  if (!(await desktopPage.locator('#todo-reminder').isChecked())) throw new Error('Reminder setting did not persist after editing');
+  if (await desktopPage.locator('.todo-form-field:has(#todo-reminder) select').inputValue() !== '30') throw new Error('Reminder lead time did not persist after editing');
+  await desktopPage.goBack();
+  await desktopPage.getByRole('region', { name: '待办' }).waitFor();
+  await desktopPage.getByRole('tab', { name: '本月' }).click();
+  if (new Date(`${desktopDate}T00:00:00`).getMonth() !== new Date().getMonth()) await desktopPage.getByRole('button', { name: '下一个周期' }).click();
+  const desktopDateObject = new Date(`${desktopDate}T00:00:00`);
+  const desktopDateLabel = `${desktopDateObject.getMonth() + 1}月${desktopDateObject.getDate()}日`;
+  await desktopPage.getByRole('gridcell', { name: new RegExp(desktopDateLabel) }).click();
+  await desktopPage.locator('.todo-calendar-day.is-focused-day').waitFor();
+  await desktopPage.screenshot({ path: 'docs/screenshots/todo-month-focused-desktop.png', fullPage: true });
+  await desktopPage.goBack();
+  await desktopPage.locator('.todo-calendar-day.is-focused-day').waitFor({ state: 'detached' });
   const desktopNav = desktopPage.locator('.sidebar');
   await desktopNav.getByRole('button', { name: '小月历' }).click();
   await desktopPage.getByRole('heading', { name: '小月历', exact: true }).waitFor();
@@ -92,18 +141,57 @@ try {
   await page.screenshot({ path: 'docs/screenshots/mobile.png', fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   if (overflow) throw new Error('The 390px mobile Todo page has horizontal overflow');
+  await page.getByRole('button', { name: '快速新增待办' }).tap();
+  const mobileCreate = page.getByRole('dialog', { name: '快速记录' });
+  await mobileCreate.waitFor();
+  await mobileCreate.getByRole('textbox', { name: '任务标题' }).fill('移动浏览器任务');
+  await mobileCreate.getByRole('button', { name: '保存' }).tap();
+  await page.getByRole('status').filter({ hasText: '已保存到收集箱' }).waitFor();
+  await page.getByRole('button', { name: /收集箱/ }).tap();
+  await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
+  await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
+  await page.goBack();
+  await page.getByRole('region', { name: '待办' }).waitFor();
   await page.getByRole('tab', { name: '今天' }).tap();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await swipe(page, '.todo-today-section', 270, 430, 130, 430);
+  await page.getByRole('heading', { name: /月\d+日/ }).waitFor();
+  await page.getByRole('tab', { name: '今天' }).tap();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  const currentWeekLabel = await page.locator('.todo-week-section .todo-overline').textContent();
+  await page.getByRole('tab', { name: '本周' }).tap();
+  await swipe(page, '.todo-week-section', 270, 430, 130, 430);
+  await page.waitForFunction((previous) => document.querySelector('.todo-week-section .todo-overline')?.textContent !== previous, currentWeekLabel);
+  await page.getByRole('tab', { name: '本周' }).tap();
+  await page.waitForFunction((current) => document.querySelector('.todo-week-section .todo-overline')?.textContent === current, currentWeekLabel);
+  const currentMonthLabel = await page.locator('.todo-calendar').getAttribute('aria-label');
   await page.getByRole('tab', { name: '本月' }).tap();
+  await swipe(page, '.todo-month-section', 270, 430, 130, 430);
+  await page.waitForFunction((previous) => document.querySelector('.todo-calendar')?.getAttribute('aria-label') !== previous, currentMonthLabel);
+  await page.getByRole('tab', { name: '本月' }).tap();
+  await page.waitForFunction((current) => document.querySelector('.todo-calendar')?.getAttribute('aria-label') === current, currentMonthLabel);
   await page.getByRole('grid').waitFor();
+  await page.locator('.todo-calendar-date.is-current').tap();
+  await page.locator('.todo-calendar-day.is-focused-day').waitFor();
+  const focusedDate = await page.locator('.todo-calendar').getAttribute('data-focused-date');
+  await swipe(page, '.todo-month-section', 270, 430, 130, 430);
+  if (await page.locator('.todo-calendar').getAttribute('data-focused-date') !== focusedDate) throw new Error('Month swipe changed period while a date was focused');
+  await page.screenshot({ path: 'docs/screenshots/todo-month-focused-mobile.png', fullPage: true });
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const calendarOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    if (calendarOverflow) throw new Error(`The focused month view has horizontal overflow at ${width}px`);
+  }
+  await page.goBack();
+  await page.locator('.todo-calendar-day.is-focused-day').waitFor({ state: 'detached' });
   await page.getByRole('tab', { name: '本周' }).tap();
   const timeViewHistoryLength = await page.evaluate(() => window.history.length);
   const inbox = page.getByRole('button', { name: /收集箱/ });
   await inbox.tap();
-  await page.getByText('想到一件要买的小东西').waitFor();
+  await page.getByText('移动浏览器任务').waitFor();
   await inbox.tap();
   if (await page.evaluate(() => window.history.length) !== timeViewHistoryLength) throw new Error('Time view or inbox interaction changed browser history');
-  await page.getByRole('button', { name: '编辑任务：整理本周工作票据' }).tap();
+  await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
   await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
   await page.goBack();
   await page.getByRole('region', { name: '待办' }).waitFor();
@@ -199,7 +287,7 @@ try {
   await mobile.setOffline(true);
   await page.reload();
   await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  console.log(JSON.stringify({ desktop: { doubleSpaceRipple: 'passed', repeatSpaceTogglesDoNotAccumulateHistory: 'passed', coupleCardSlide: 'passed', editingAndHistory: 'passed', quickAddDemo: 'passed', foundationModulesAndSettings: 'passed' }, mobile390x844: { periodViewsDoNotAddHistory: 'passed', inbox: 'passed', personalEditorBack: 'passed', quickAddBack: 'passed', coupleTouchAndHistoryBack: 'passed', globalTabsDoNotAddHistory: 'passed', nestedTodoReloadRecovery: 'passed', noHorizontalOverflow: 'passed', scroll: { initial, restored } }, pwa: registration, offlineReload: 'passed', screenshots: ['docs/screenshots/mobile.png', 'docs/screenshots/todo-couple-desktop.png', 'docs/screenshots/todo-couple-mobile.png', 'docs/screenshots/todo-couple-card-expanded.png'] }, null, 2));
+  console.log(JSON.stringify({ desktop: { doubleSpaceRipple: 'passed', repeatSpaceTogglesDoNotAccumulateHistory: 'passed', monthFocus: 'passed', indexedDbTaskEdit: 'passed', coupleCardSlide: 'passed', editingAndHistory: 'passed', quickAdd: 'passed', foundationModulesAndSettings: 'passed' }, mobile: { viewPeriodAndInbox: 'passed', indexedDbQuickAdd: 'passed', personalEditorBack: 'passed', monthFocusAndReducedWidths: 'passed', coupleTouchAndHistoryBack: 'passed', globalTabsDoNotAddHistory: 'passed', nestedTodoReloadRecovery: 'passed', noHorizontalOverflow: 'passed', scroll: { initial, restored } }, pwa: registration, offlineReload: 'passed', screenshots: ['docs/screenshots/mobile.png', 'docs/screenshots/todo-month-focused-mobile.png', 'docs/screenshots/todo-month-focused-desktop.png', 'docs/screenshots/todo-couple-desktop.png', 'docs/screenshots/todo-couple-mobile.png', 'docs/screenshots/todo-couple-card-expanded.png'] }, null, 2));
   await mobile.close();
 } finally {
   await browser.close();

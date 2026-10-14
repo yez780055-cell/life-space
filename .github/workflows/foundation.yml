@@ -46,3 +46,10 @@ jobs:
         run: npm run verify:browser
         env:
           LIFE_SPACE_PREVIEW_URL: http://127.0.0.1:4173/life-space/
+      - name: Save browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: todo-phase-2b-browser-screenshots
+          path: docs/screenshots/
+          if-no-files-found: ignore
