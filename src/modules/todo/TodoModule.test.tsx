@@ -26,6 +26,24 @@ async function removeDatabase() {
   });
 }
 
+async function browserHistoryBack(expectedPopstates = 1) {
+  await act(async () => {
+    const popped = new Promise<void>((resolve) => {
+      let count = 0;
+      const onPopState = () => {
+        count += 1;
+        if (count === expectedPopstates) {
+          window.removeEventListener('popstate', onPopState);
+          resolve();
+        }
+      };
+      window.addEventListener('popstate', onPopState);
+    });
+    history.back();
+    await popped;
+  });
+}
+
 async function enterCouple() {
   fireEvent.click(screen.getByRole('button', { name: '进入情侣专区' }));
   const ripple = await screen.findByTestId('space-ripple');
@@ -227,7 +245,7 @@ describe('Todo Phase 2B', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect((await todoRepository.listTasks())[0].scheduledDate).toBe(date);
     expect(await screen.findByRole('button', { name: '编辑任务：给花换盆' })).toBeTruthy();
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await waitFor(() => expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeNull());
   });
 
@@ -329,11 +347,11 @@ describe('Todo Phase 2B', () => {
     fireEvent.click(await screen.findByRole('button', { name: '编辑任务：暂存任务' }));
     fireEvent.change(await screen.findByLabelText('备注'), { target: { value: '还没保存' } });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack(2);
     expect(screen.getByRole('heading', { name: '编辑任务' })).toBeTruthy();
     expect(confirm).toHaveBeenCalledOnce();
     confirm.mockReturnValue(true);
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await waitFor(() => expect(screen.queryByRole('heading', { name: '编辑任务' })).toBeNull());
     expect((await todoRepository.listTasks())[0].note).toBe('');
   });
@@ -348,7 +366,7 @@ describe('Todo Phase 2B', () => {
     expect(firstCard.getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: '编辑：找一家喜欢的日料店' }));
     await screen.findByRole('heading', { name: '编辑小事' });
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await screen.findByRole('region', { name: '我们的小事' });
     expect(screen.getByRole('button', { name: '返回个人待办' })).toBeTruthy();
   });
@@ -379,19 +397,19 @@ describe('Todo Phase 2B', () => {
     await screen.findByRole('region', { name: '待办' });
     fireEvent.click(screen.getByRole('button', { name: '快速新增待办' }));
     await screen.findByRole('dialog', { name: '快速记录' });
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await enterCouple();
     fireEvent.click(screen.getByRole('button', { name: '查看已完成历史' }));
     await screen.findByRole('heading', { name: '完成的时光' });
     fireEvent.click(screen.getByRole('button', { name: '筛选时间范围' }));
     await screen.findByRole('dialog', { name: '选择时间范围' });
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(screen.getByRole('heading', { name: '完成的时光' })).toBeTruthy();
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await screen.findByRole('region', { name: '我们的小事' });
-    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await browserHistoryBack();
     await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-current-space')).toBe('personal'));
   });
 
