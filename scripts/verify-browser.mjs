@@ -12,6 +12,25 @@ async function waitForSpace(page, space) {
   if (await page.getByTestId('space-ripple').count()) throw new Error('A space ripple remained after the transition');
 }
 
+async function waitForSavedModule(page, module) {
+  await page.waitForFunction(async (expected) => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('life-space', 2);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = database.transaction('settings', 'readonly').objectStore('settings').get('lastModule');
+        request.onsuccess = () => resolve(request.result === expected);
+        request.onerror = () => reject(request.error);
+      });
+    } finally {
+      database.close();
+    }
+  }, module, { timeout: 5000, polling: 100 });
+}
+
 try {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const desktopPage = await desktop.newPage();
@@ -111,6 +130,7 @@ try {
   await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
   await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
   await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
+  await waitForSavedModule(page, 'anniversary');
   await page.reload();
   await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
   await page.getByRole('button', { name: '打开设置' }).tap();
