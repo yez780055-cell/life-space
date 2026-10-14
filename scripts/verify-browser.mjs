@@ -130,6 +130,12 @@ try {
   await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
   await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
   await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
+  await page.locator('.bottom-nav').getByRole('button', { name: '待办' }).tap();
+  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
+  const restored = await page.locator('.module-holder.visible').evaluate((element) => element.scrollTop);
+  if (restored !== initial) throw new Error(`Module scroll was not preserved across navigation: ${initial} -> ${restored}`);
+  await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
+  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
   await waitForSavedModule(page, 'anniversary');
   await page.reload();
   await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
@@ -139,8 +145,6 @@ try {
   await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
   await page.locator('.bottom-nav').getByRole('button', { name: '待办' }).tap();
   await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  const restored = await page.locator('.module-holder.visible').evaluate((element) => element.scrollTop);
-  if (restored !== initial) throw new Error(`Module scroll was not preserved: ${initial} -> ${restored}`);
 
   const registration = await page.evaluate(async () => {
     const ready = await navigator.serviceWorker.ready;
