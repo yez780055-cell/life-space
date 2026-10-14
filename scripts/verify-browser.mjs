@@ -80,7 +80,7 @@ try {
   await page.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(page, 'couple');
   await page.screenshot({ path: 'docs/screenshots/todo-couple-mobile.png', fullPage: true });
-  const coupleCard = page.getByRole('button', { name: /找一家喜欢的日料店/ });
+  const coupleCard = page.locator('.couple-card-body').first();
   await coupleCard.tap();
   if (await coupleCard.getAttribute('aria-expanded') !== 'true') throw new Error('Mobile couple card did not expand');
   await page.screenshot({ path: 'docs/screenshots/todo-couple-card-expanded.png', fullPage: true });
