@@ -159,14 +159,14 @@ try {
   await page.getByRole('heading', { name: /月\d+日/ }).waitFor();
   await page.getByRole('tab', { name: '今天' }).tap();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
-  const currentWeekLabel = await page.locator('.todo-week-section .todo-overline').textContent();
   await page.getByRole('tab', { name: '本周' }).tap();
+  const currentWeekLabel = await page.locator('.todo-week-section .todo-overline').textContent();
   await swipe(page, '.todo-week-section', 270, 430, 130, 430);
   await page.waitForFunction((previous) => document.querySelector('.todo-week-section .todo-overline')?.textContent !== previous, currentWeekLabel);
   await page.getByRole('tab', { name: '本周' }).tap();
   await page.waitForFunction((current) => document.querySelector('.todo-week-section .todo-overline')?.textContent === current, currentWeekLabel);
-  const currentMonthLabel = await page.locator('.todo-calendar').getAttribute('aria-label');
   await page.getByRole('tab', { name: '本月' }).tap();
+  const currentMonthLabel = await page.locator('.todo-calendar').getAttribute('aria-label');
   await swipe(page, '.todo-month-section', 270, 430, 130, 430);
   await page.waitForFunction((previous) => document.querySelector('.todo-calendar')?.getAttribute('aria-label') !== previous, currentMonthLabel);
   await page.getByRole('tab', { name: '本月' }).tap();
