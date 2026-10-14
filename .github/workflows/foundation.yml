@@ -29,8 +29,11 @@ jobs:
       - name: Start built preview server
         env:
           LIFE_SPACE_PREVIEW_URL: http://127.0.0.1:4173/life-space/
+          LIFE_SPACE_PREVIEW_ROOT: ${{ runner.temp }}/life-space-preview
         run: |
-          npm run preview -- --host 127.0.0.1 > /tmp/life-space-preview.log 2>&1 &
+          mkdir -p "$LIFE_SPACE_PREVIEW_ROOT/life-space"
+          cp -a dist/. "$LIFE_SPACE_PREVIEW_ROOT/life-space/"
+          npm run preview -- --host 127.0.0.1 --outDir "$LIFE_SPACE_PREVIEW_ROOT" > /tmp/life-space-preview.log 2>&1 &
           for attempt in {1..30}; do
             if curl -fsS "$LIFE_SPACE_PREVIEW_URL" >/dev/null; then
               exit 0
