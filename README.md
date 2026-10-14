@@ -18,14 +18,12 @@ PR 的常规 GitHub Actions 只执行 Web 类型检查、lint、测试和构建�
 
 ## 预览与验证
 
-Foundation 开发预览使用 GitHub Pages，候选地址为 <https://yez780055-cell.github.io/life-space/>。`feat/foundation` 分支每次推送都会构建并尝试部署，不依赖合并 PR。该链接须待 GitHub Pages 部署成功后才可使用，页面仍标记为开发测试版。
+Phase 2A 网页验收预览使用 GitHub Pages：<https://yez780055-cell.github.io/life-space/>。`feat/todo-phase-2a` 分支每次推送都会构建并部署，不依赖合并 PR。GitHub Pages 在本仓库只有这一个站点地址，因此部署会替换该地址当前展示的 Foundation 开发预览；同一分支后续推送会继续更新这个验收站。该地址用于开发验收，不代表正式发布。
 
-首次使用时，仓库管理员需在 `life-space` 的 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。若当前 Actions 因 Pages 未启用而失败，启用后在 **Actions → Foundation Web preview** 对失败的运行选择 **Re-run all jobs**。仅启用此仓库的 Pages；原小月历网站不受影响。预览地址公开可访问，当前占位版不含真实记录功能。
+首次使用时，仓库管理员需在 `life-space` 的 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。若当前 Actions 因 Pages 未启用而失败，启用后在 **Actions → Todo Phase 2A Web preview** 对失败的运行选择 **Re-run all jobs**。仅启用此仓库的 Pages；原小月历网站不受影响。预览地址公开可访问；Todo 本阶段使用示例数据，Period 与 Anniversary 仍是占位页。
 
-![手机预览](docs/screenshots/mobile.png)
+当前可操作预览：<https://yez780055-cell.github.io/life-space/>。
 
-![桌面预览](docs/screenshots/desktop.png)
-
-`npm run verify:browser` 在本地启动的生产预览 `http://127.0.0.1:4173/` 上使用 Playwright Chromium 检查手机和桌面模块、设置、返回、状态保留、Service Worker 路径与离线刷新，并更新截图。首次运行可执行 `npx playwright install chromium`；若使用系统 Chromium，可设 `LIFE_SPACE_CHROMIUM_PATH`。其他环境可用 `LIFE_SPACE_PREVIEW_URL` 指定地址，测试子路径时请包含末尾 `/`。
+`npm run verify:browser` 在本地启动的生产预览 `http://127.0.0.1:4173/` 上使用 Playwright Chromium 检查 Todo 双空间涟漪、移动触控、视图切换、收集箱、快速新增、情侣卡片操作、历史筛选、Foundation 模块导航、PWA 子路径与离线刷新，并更新截图。首次运行可执行 `npx playwright install chromium`；若使用系统 Chromium，可设 `LIFE_SPACE_CHROMIUM_PATH`。其他环境可用 `LIFE_SPACE_PREVIEW_URL` 指定地址，测试子路径时请包含末尾 `/`。
 
 测试记录见 [docs/verification.md](docs/verification.md)。

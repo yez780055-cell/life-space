@@ -1,15 +1,19 @@
 import { DEFAULT_MODULE, type ModuleId } from '../../shared/storage/settings';
 
 export type Page = 'home' | 'guide';
-export type Surface = 'settings' | 'about';
+export type TodoSpace = 'personal' | 'couple';
+export type TodoScreen = 'home' | 'personal-editor' | 'couple-editor' | 'couple-history';
+export type Surface = 'settings' | 'about' | 'todo-add-personal' | 'todo-add-couple' | 'history-filter';
 export type NavigationSnapshot = {
   module: ModuleId;
   pages: Record<ModuleId, Page>;
+  todoSpace: TodoSpace;
+  todoScreen: TodoScreen;
   surfaces: Surface[];
 };
 
 export function initialSnapshot(module: ModuleId = DEFAULT_MODULE): NavigationSnapshot {
-  return { module, pages: { todo: 'home', period: 'home', anniversary: 'home' }, surfaces: [] };
+  return { module, pages: { todo: 'home', period: 'home', anniversary: 'home' }, todoSpace: 'personal', todoScreen: 'home', surfaces: [] };
 }
 
 export function openGuide(state: NavigationSnapshot): NavigationSnapshot {
