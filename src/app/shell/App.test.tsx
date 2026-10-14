@@ -20,7 +20,7 @@ describe('application navigation', () => {
     expect(screen.getAllByRole('button', { name: '纪念日' }).length).toBeGreaterThan(0);
   });
 
-  it('returns through modal, settings, and Todo editor page', async () => {
+  it('returns through modal, settings, and the Todo editor overlay', async () => {
     await todoRepository.createQuickTask('编辑验证任务');
     render(<App/>);
     const page = await screen.findByRole('region', { name: '待办' });
@@ -35,7 +35,7 @@ describe('application navigation', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(within(screen.getByRole('region', { name: '设置' })).getByRole('button', { name: '返回' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: '设置' })).toBeNull());
-    fireEvent.click(within(screen.getByRole('region', { name: '待办' })).getByRole('button', { name: '返回' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: '编辑任务' })).getByRole('button', { name: '返回' }));
     await waitFor(() => expect(screen.getByRole('tab', { name: '本周' }).getAttribute('aria-selected')).toBe('true'));
   });
 
@@ -50,7 +50,7 @@ describe('application navigation', () => {
     await waitFor(() => expect(screen.getByRole('region', { name: '小月历' })).toBeTruthy());
     fireEvent.click(screen.getAllByRole('navigation', { name: '主要导航' })[0].querySelectorAll('button')[0]);
     await screen.findByRole('heading', { name: '编辑任务' });
-    fireEvent.click(within(screen.getByRole('region', { name: '待办' })).getByRole('button', { name: '返回' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: '编辑任务' })).getByRole('button', { name: '返回' }));
     await waitFor(() => expect(screen.getByRole('tab', { name: '本周' }).getAttribute('aria-selected')).toBe('true'));
   });
 });

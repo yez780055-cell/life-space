@@ -33,8 +33,9 @@
 .todo-inbox-chevron{width:16px;height:16px;color:#9ca9aa;transition:transform .2s ease}
 .todo-inbox.expanded .todo-inbox-chevron{transform:rotate(180deg)}
 .todo-inbox-list{padding:6px 16px 10px 65px;margin-top:-6px;border-radius:0 0 16px 16px;background:#fff;border:1px solid #e9eeed;border-top:0;animation:todo-reveal .22s ease both}
-.todo-inbox-list button{width:100%;display:flex;align-items:center;gap:9px;padding:11px 0;text-align:left;color:#667478;border:0;border-bottom:1px solid #f1f3f2;background:transparent;font-size:12px}
-.todo-inbox-list button svg{width:15px;height:15px;color:#acb8b9;margin-left:auto}
+.todo-inbox-list>.todo-task-row{min-height:0;padding:10px 4px;border:0;border-bottom:1px solid #f1f3f2;border-radius:0;background:transparent;box-shadow:none}
+.todo-inbox-list>.todo-task-row:last-child{border-bottom:0}
+.todo-inbox-list>.todo-task-row>.todo-task-edit svg{width:15px;height:15px;color:#acb8b9;margin-left:0}
 .todo-small-dot{width:5px;height:5px;border-radius:50%;background:#a3b5b8;flex:none}
 .todo-inbox-caption{display:block;padding-top:10px;color:#adb6b5;font-size:10px}
 .todo-day-section,.todo-week-section,.todo-month-section{margin-top:34px}
@@ -47,7 +48,7 @@
 .todo-check{width:22px;height:22px;display:grid;place-items:center;flex:none;border:1.5px solid #cad5d6;border-radius:8px;color:transparent;background:transparent;transition:background .2s ease,border-color .2s ease}
 .todo-check svg{width:14px;height:14px}
 .todo-check[aria-pressed=true]{background:#9aafb3;border-color:#9aafb3;color:white}
-.todo-task-open{min-width:0;flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;background:transparent;text-align:left;color:#4a585c;padding:0}
+.todo-task-open{width:100%;min-width:0;min-height:24px;display:grid;gap:4px;justify-content:stretch;align-items:start;border:0;background:transparent;text-align:left;color:#4a585c;padding:0}
 .todo-task-title{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .todo-task-time{display:flex;align-items:center;gap:4px;color:#98a4a5;font-size:11px;white-space:nowrap}
 .todo-task-time svg{width:13px;height:13px}
@@ -207,7 +208,7 @@
   .todo-week-date{padding-left:1px}
   .todo-week-date strong{font-size:18px}
   .todo-task-row{gap:8px;padding:9px}
-  .todo-task-open{align-items:flex-start;flex-direction:column;gap:3px}
+  .todo-task-open{align-items:start;gap:4px}
   .todo-task-time{font-size:10px}
   .todo-calendar{padding:8px;gap:3px}
   .todo-calendar-day{border-radius:8px;font-size:11px}
@@ -302,7 +303,7 @@
 .todo-create-tag{display:flex;gap:8px;margin-top:9px}
 .todo-create-tag input{min-height:38px;padding:8px 10px;border:1px solid #e7eceb;border-radius:9px;background:white;color:#435155;font:inherit;font-size:12px;flex:1;min-width:0}
 .todo-field-error{color:#b36f69;font-size:10px}
-.todo-subtasks label input[aria-label="子任务标题"]{width:auto;min-height:34px;flex:1;padding:7px 9px;border:1px solid #e9eeed;border-radius:8px;font:inherit;font-size:12px}
+.todo-subtasks input[aria-label="子任务标题"]{width:auto;min-height:34px;flex:1;padding:7px 9px;border:1px solid #e9eeed;border-radius:8px;font:inherit;font-size:12px}
 .todo-editor-danger{display:flex;gap:8px;margin:20px 0}
 .todo-delete-button{padding:9px 12px;border:1px solid #eedbd8;border-radius:9px;background:#fff9f8;color:#ac7670;font-size:10px}
 .todo-data-error{max-width:850px;margin:0 auto 15px;padding:12px;border:1px solid #ead1cb;border-radius:12px;background:#fff8f6;color:#9c655e;font-size:12px;line-height:1.6}
@@ -335,4 +336,72 @@
   .todo-calendar-day.is-focused-day{grid-column:1 / span 4!important}
   .todo-calendar-focus-list .todo-task-row{gap:3px;padding:4px}
   .todo-calendar-focus-list .todo-task-title{font-size:9px}
+}
+
+/* Todo task rows keep their controls independent at narrow inbox widths. */
+.todo-task-main{min-width:0;flex:1;display:grid;gap:7px}
+.todo-task-open{flex:1;overflow:hidden}
+.todo-task-title{display:block;min-width:0;writing-mode:horizontal-tb;overflow-wrap:anywhere}
+.todo-task-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.todo-task-subtasks{display:grid;gap:4px;min-width:0}
+.todo-task-subtasks label{display:flex;align-items:flex-start;gap:8px;min-width:0;color:#829092;font-size:11px;line-height:1.45;cursor:pointer}
+.todo-task-subtasks input{width:16px;height:16px;min-height:16px;flex:none;margin:0;accent-color:var(--todo-accent,#829ba0)}
+.todo-task-subtasks label.is-checked span{text-decoration:line-through;color:#a6b0b0}
+.todo-task-edit{width:34px;height:36px;min-width:34px;flex:none;border-radius:9px}
+.todo-task-edit:active,.todo-check:active{transform:scale(.94)}
+.todo-calendar-focus-list .todo-task-subtasks label{gap:3px;font-size:8px}
+.todo-calendar-focus-list .todo-task-subtasks input{width:12px;height:12px;min-height:12px}
+.todo-calendar-focus-list .todo-task-main{gap:3px}
+
+/* The personal editor is a modal sheet above the still-mounted Todo context. */
+.todo-editor-overlay{position:fixed;z-index:55;inset:0;display:grid;place-items:center;padding:24px;background:rgba(41,51,53,.34);backdrop-filter:blur(2px)}
+.todo-editor-sheet{width:min(760px,100%);height:min(860px,calc(100dvh - 48px));min-height:300px;overflow:hidden;border-radius:25px;background:#fbfcfb;box-shadow:0 28px 90px #27383b35}
+.todo-editor{width:100%;height:100%;max-width:none;min-height:0;margin:0;padding:0;display:flex;flex-direction:column;overflow:hidden}
+.todo-editor>.todo-subpage-header{flex:none;margin:0;padding:22px 28px 16px;border-bottom:1px solid #edf0ef;background:#fbfcfb}
+.todo-editor-scroll{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;padding:18px clamp(18px,4vw,34px) 8px;scroll-padding-block:20px 24vh}
+.todo-editor-scroll .todo-form-grid{gap:12px}
+.todo-editor-scroll .todo-form-field{margin-bottom:16px}
+.todo-editor-scroll .todo-form-disclaimer{margin:14px 0 12px}
+.todo-editor-scroll .todo-editor-danger{margin:14px 0}
+.todo-form-actions{flex:none;padding:12px clamp(18px,4vw,34px) max(12px,var(--safe-bottom));border-top:1px solid #edf0ef;background:#fbfcfb}
+.todo-editor-scope{margin-bottom:16px;padding:12px 14px;background:#f8faf9}
+.todo-editor-scope p{width:100%;margin:0 0 0 22px;color:#9ba7a8;font-size:10px}
+.todo-editor-more{margin:4px 0 18px;border:1px solid #e8edec;border-radius:13px;background:#fff}
+.todo-editor-more>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;color:#657579;font-size:12px;cursor:pointer;list-style:none}
+.todo-editor-more>summary::-webkit-details-marker{display:none}
+.todo-editor-more>summary:after{content:"＋";color:#8ca0a2;font-size:16px}
+.todo-editor-more[open]>summary:after{content:"−"}
+.todo-editor-more>summary span{margin-left:auto;color:#a0acad;font-size:10px}
+.todo-editor-more-content{padding:0 14px 4px;border-top:1px solid #f0f2f1}
+.todo-editor-more-content>.todo-form-field:first-child{margin-top:15px}
+.todo-repeat-summary{margin:-1px 0 0;color:#89989a;font-size:10px;line-height:1.5}
+.todo-repeat-summary small{font-size:inherit;color:#a7b0b0}
+.todo-repeat-advanced{border-top:1px solid #eef1f0;padding-top:10px}
+.todo-repeat-advanced>summary{width:max-content;color:#809194;font-size:10px;cursor:pointer;list-style:none}
+.todo-repeat-advanced>summary:before{content:"＋ ";color:#9dafb0}
+.todo-repeat-advanced[open]>summary:before{content:"− "}
+.todo-repeat-options{margin-top:9px}
+.todo-weekday-options button{width:auto;min-width:42px;padding:0 7px;border-radius:11px}
+.todo-subtasks label .todo-remove-subtask{width:30px;height:32px;display:grid;place-items:center;flex:none;border:0;border-radius:8px;background:transparent;color:#a7b1b1}
+.todo-subtasks label .todo-remove-subtask svg{width:15px;height:15px}
+.todo-subtask-editor-row{display:flex;align-items:center;gap:8px;min-width:0}
+.todo-subtask-editor-row>input[type=checkbox]{width:15px;height:15px;min-height:15px;flex:none;margin:0;accent-color:#829ba0}
+.todo-subtask-editor-row>.todo-remove-subtask{width:30px;height:32px;display:grid;place-items:center;flex:none;border:0;border-radius:8px;background:transparent;color:#a7b1b1}
+.todo-subtask-editor-row>.todo-remove-subtask svg{width:15px;height:15px}
+
+@media(max-width:700px){
+  .todo-editor-overlay{inset:0;place-items:end center;padding:var(--safe-top) 0 0;background:rgba(41,51,53,.36);backdrop-filter:blur(1px)}
+  .todo-editor-sheet{width:100%;height:min(78dvh,calc(100% - var(--safe-top) - 18px));max-height:calc(100% - var(--safe-top) - 18px);min-height:0;border-radius:23px 23px 0 0}
+  .todo-editor>.todo-subpage-header{padding:15px 17px 12px}
+  .todo-editor-scroll{padding:14px 17px 8px;scroll-padding-bottom:32vh}
+  .todo-form-actions{padding:10px 17px max(12px,var(--safe-bottom))}
+  .todo-editor-more>summary{padding:12px}
+  .todo-editor-more-content{padding-right:11px;padding-left:11px}
+  .todo-task-row{gap:8px}
+  .todo-task-edit{width:34px;min-width:34px}
+}
+@media(max-width:380px){
+  .todo-editor-scroll .todo-form-grid{grid-template-columns:minmax(0,1fr)}
+  .todo-editor-more>summary{flex-wrap:wrap}
+  .todo-editor-more>summary span{margin-left:0}
 }

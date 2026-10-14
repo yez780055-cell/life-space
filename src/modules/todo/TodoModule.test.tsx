@@ -81,6 +81,7 @@ describe('Todo Phase 2B', () => {
     const targetDate = addDays(todayKey(), 2);
     fireEvent.change(screen.getByLabelText('任务日期'), { target: { value: targetDate } });
     fireEvent.change(screen.getByLabelText('具体时间'), { target: { value: '19:30' } });
+    fireEvent.click(screen.getByText('更多设置'));
     fireEvent.change(screen.getByRole('textbox', { name: '备注' }), { target: { value: '买无香型补充装' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => expect(screen.queryByRole('heading', { name: '编辑任务' })).toBeNull());
@@ -109,6 +110,76 @@ describe('Todo Phase 2B', () => {
     expect((await todoRepository.listTasks())).toHaveLength(1);
   });
 
+  it('shows actionable subtasks in task rows and preserves automatic versus manual completion', async () => {
+    const autoTask = await todoRepository.saveTask({
+      title: '收拾厨房', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [],
+      subtasks: [{ id: 'auto-a', title: '清理台面', checked: false }, { id: 'auto-b', title: '擦灶台', checked: false }],
+      recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
+    });
+    const manualTask = await todoRepository.saveTask({
+      title: '浇花', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [],
+      subtasks: [{ id: 'manual-a', title: '给绿萝浇水', checked: false }],
+      recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
+    });
+    render(<App/>);
+    await screen.findByRole('heading', { name: '这一周' });
+    fireEvent.click(await screen.findByRole('checkbox', { name: '子任务：清理台面' }));
+    await waitFor(() => expect((screen.getByRole('checkbox', { name: '子任务：清理台面' }) as HTMLInputElement).checked).toBe(true));
+    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：擦灶台' }));
+    await waitFor(async () => {
+      const saved = (await todoRepository.listTasks()).find((item) => item.id === autoTask.id);
+      expect(saved?.completionSource).toBe('subtasks');
+      expect(saved?.completedAt).toBeTypeOf('number');
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：清理台面' }));
+    await waitFor(async () => {
+      const saved = (await todoRepository.listTasks()).find((item) => item.id === autoTask.id);
+      expect(saved?.completionSource).toBeNull();
+      expect(saved?.completedAt).toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '完成任务：浇花' }));
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === manualTask.id)?.completionSource).toBe('manual'));
+    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：给绿萝浇水' }));
+    await waitFor(() => expect((screen.getByRole('checkbox', { name: '子任务：给绿萝浇水' }) as HTMLInputElement).checked).toBe(true));
+    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：给绿萝浇水' }));
+    await waitFor(async () => {
+      const saved = (await todoRepository.listTasks()).find((item) => item.id === manualTask.id);
+      expect(saved?.completionSource).toBe('manual');
+      expect(saved?.completedAt).toBeTypeOf('number');
+    });
+  });
+
+  it('adds, renames, and deletes draft subtasks in the task editor', async () => {
+    await todoRepository.createQuickTask('准备周末出门');
+    render(<App/>);
+    await screen.findByRole('region', { name: '待办' });
+    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：准备周末出门' }));
+    fireEvent.click(screen.getByRole('button', { name: /添加子任务/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: '子任务标题' }), { target: { value: '带上外套' } });
+    expect(screen.getByRole('button', { name: '删除子任务：带上外套' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '删除子任务：带上外套' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
+    expect((await todoRepository.listTasks())[0].subtasks).toEqual([]);
+  });
+
+  it('keeps the editor draft open when IndexedDB saving fails', async () => {
+    await todoRepository.createQuickTask('草稿任务');
+    render(<App/>);
+    await screen.findByRole('region', { name: '待办' });
+    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：草稿任务' }));
+    const title = await screen.findByRole('textbox', { name: '任务标题' });
+    fireEvent.change(title, { target: { value: '已修改的草稿' } });
+    vi.spyOn(todoRepository, 'saveTask').mockRejectedValueOnce(new Error('本机存储暂不可用'));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect((await screen.findByRole('status')).textContent).toContain('本机存储暂不可用');
+    expect(screen.getByRole('dialog', { name: '编辑任务' })).toBeTruthy();
+    expect((screen.getByRole('textbox', { name: '任务标题' }) as HTMLInputElement).value).toBe('已修改的草稿');
+  });
+
   it('opens and closes a month date in place and creates a task for the selected date', async () => {
     render(<App/>);
     await screen.findByRole('region', { name: '待办' });
@@ -132,6 +203,32 @@ describe('Todo Phase 2B', () => {
     await waitFor(() => expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeNull());
   });
 
+  it('keeps the focused month page under the editor sheet and restores focus on Escape', async () => {
+    await todoRepository.saveTask({
+      title: '读几页书', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [], subtasks: [], recurrence: null,
+      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
+    });
+    render(<App/>);
+    await screen.findByRole('region', { name: '待办' });
+    fireEvent.click(screen.getByRole('tab', { name: '本月' }));
+    const today = fromDateKey(todayKey());
+    const todayLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
+    fireEvent.click(screen.getByRole('gridcell', { name: new RegExp(todayLabel) }));
+    const editorButton = await screen.findByRole('button', { name: '编辑任务：读几页书' });
+    const focusedDate = document.querySelector('.todo-calendar')?.getAttribute('data-focused-date');
+    fireEvent.click(editorButton);
+    const editor = await screen.findByRole('dialog', { name: '编辑任务' });
+    expect(document.querySelector('.todo-editor-overlay')).toBeTruthy();
+    expect(document.querySelector('.todo-module-root')?.hasAttribute('inert')).toBe(true);
+    expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeTruthy();
+    expect(document.querySelector('.todo-calendar')?.getAttribute('data-focused-date')).toBe(focusedDate);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
+    expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(editorButton));
+    expect(editor.isConnected).toBe(false);
+  });
+
   it('creates a daily series through the editor and stores it as a rule, not copied rows', async () => {
     const task = await todoRepository.saveTask({
       title: '服药', note: '', scheduledDate: todayKey(), scheduledTime: '08:30', tags: [], subtasks: [], recurrence: null,
@@ -141,11 +238,38 @@ describe('Todo Phase 2B', () => {
     await screen.findByRole('region', { name: '待办' });
     fireEvent.click(screen.getByRole('tab', { name: '今天' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑任务：服药' }));
+    expect((document.querySelector('.todo-editor-more') as HTMLDetailsElement).open).toBe(false);
+    fireEvent.click(screen.getByText('更多设置'));
     const recurrence = await screen.findByRole('combobox', { name: '重复规则' });
     fireEvent.change(recurrence, { target: { value: 'daily' } });
+    expect(document.querySelector('.todo-repeat-summary')?.textContent).toContain('每天');
+    expect(document.querySelector('.todo-repeat-advanced')?.hasAttribute('open')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.recurrence?.frequency).toBe('daily'));
     expect(await todoRepository.listOccurrences()).toHaveLength(0);
+  });
+
+  it('preselects an existing advanced weekly rule and keeps occurrence scope as the default', async () => {
+    const today = todayKey();
+    const weekday = fromDateKey(today).getDay();
+    const task = await todoRepository.saveTask({
+      title: '每周整理', note: '', scheduledDate: today, scheduledTime: null, tags: [], subtasks: [],
+      recurrence: { frequency: 'weekly', interval: 2, startsOn: today, endsOn: addDays(today, 45), weekdays: [weekday, (weekday + 2) % 7] },
+      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
+    });
+    render(<App/>);
+    await screen.findByRole('heading', { name: '这一周' });
+    fireEvent.click((await screen.findAllByRole('button', { name: '编辑任务：每周整理' }))[0]);
+    expect((screen.getByRole('radio', { name: '仅此周期' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: '此周期及之后' }));
+    fireEvent.click(screen.getByText('更多设置'));
+    expect((screen.getByRole('combobox', { name: '重复规则' }) as HTMLSelectElement).value).toBe('weekly');
+    expect(screen.getByLabelText('重复间隔')).toHaveProperty('value', '2');
+    expect(screen.getByText(/每 2 周/)).toBeTruthy();
+    expect(document.querySelector('.todo-repeat-advanced')?.hasAttribute('open')).toBe(true);
+    const names = ['日', '一', '二', '三', '四', '五', '六'];
+    for (const day of [weekday, (weekday + 2) % 7]) expect(screen.getByRole('button', { name: `周${names[day]}` }).getAttribute('aria-pressed')).toBe('true');
+    expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.recurrence?.weekdays).toEqual([weekday, (weekday + 2) % 7]);
   });
 
   it('stops a recurring series from the selected cycle and keeps that cycle as a one-off task', async () => {
@@ -159,6 +283,7 @@ describe('Todo Phase 2B', () => {
     fireEvent.click(screen.getByRole('tab', { name: '今天' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑任务：浇花' }));
     fireEvent.click(await screen.findByLabelText(/此周期及之后/));
+    fireEvent.click(screen.getByText('更多设置'));
     fireEvent.change(screen.getByRole('combobox', { name: '重复规则' }), { target: { value: 'none' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await screen.findByRole('button', { name: '编辑任务：浇花' });

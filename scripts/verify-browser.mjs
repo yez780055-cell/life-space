@@ -1,4 +1,4 @@
-/* global process, navigator, console, URL, document, fetch, window, indexedDB, Touch, TouchEvent */
+/* global process, navigator, console, URL, document, fetch, window, indexedDB, Touch, TouchEvent, getComputedStyle */
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 
@@ -83,12 +83,17 @@ try {
   await desktopPage.getByRole('button', { name: /收集箱/ }).click();
   await desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' }).click();
   await desktopPage.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
+  await desktopPage.getByRole('button', { name: /添加子任务/ }).click();
+  await desktopPage.getByRole('textbox', { name: '子任务标题' }).last().fill('整理书本');
+  await desktopPage.getByRole('button', { name: /添加子任务/ }).click();
+  await desktopPage.getByRole('textbox', { name: '子任务标题' }).last().fill('准备水杯');
   const desktopDate = await desktopPage.evaluate(() => {
     const date = new Date(); date.setDate(date.getDate() + 2);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   });
   await desktopPage.getByLabel('任务日期').fill(desktopDate);
   await desktopPage.getByLabel('具体时间').fill('19:30');
+  await desktopPage.getByText('更多设置').click();
   await desktopPage.getByLabel('备注').fill('Playwright 持久化验证');
   await desktopPage.getByLabel('新标签名称').fill('个人');
   await desktopPage.getByRole('button', { name: '添加标签' }).click();
@@ -105,7 +110,13 @@ try {
   const savedTaskRow = desktopPage.locator('.todo-task-row').filter({ hasText: '视觉预览任务' });
   await savedTaskRow.waitFor();
   await savedTaskRow.locator('.todo-task-tags').getByText('个人').waitFor();
+  await savedTaskRow.locator('input[aria-label="子任务：整理书本"]').check();
+  await savedTaskRow.locator('input[aria-label="子任务：准备水杯"]').check();
+  await savedTaskRow.getByRole('button', { name: '恢复任务：视觉预览任务' }).waitFor();
+  await savedTaskRow.locator('input[aria-label="子任务：整理书本"]').uncheck();
+  await savedTaskRow.getByRole('button', { name: '完成任务：视觉预览任务' }).waitFor();
   await savedTaskRow.getByRole('button', { name: '编辑任务：视觉预览任务' }).click();
+  await desktopPage.getByText('更多设置').click();
   await desktopPage.getByLabel('开启提醒').waitFor();
   if (!(await desktopPage.locator('#todo-reminder').isChecked())) throw new Error('Reminder setting did not persist after editing');
   if (await desktopPage.locator('.todo-form-field:has(#todo-reminder) select').inputValue() !== '30') throw new Error('Reminder lead time did not persist after editing');
@@ -151,6 +162,50 @@ try {
   await page.getByRole('button', { name: /收集箱/ }).tap();
   await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
   await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
+  await page.getByRole('button', { name: /添加子任务/ }).tap();
+  await page.getByRole('textbox', { name: '子任务标题' }).last().fill('装进包里');
+  await page.getByRole('button', { name: '保存' }).tap();
+  await page.getByRole('region', { name: '待办' }).waitFor();
+  const mobileInboxRow = page.locator('.todo-inbox-list > .todo-task-row').filter({ hasText: '移动浏览器任务' });
+  await mobileInboxRow.waitFor();
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const bounds = await mobileInboxRow.evaluate((row) => {
+      const rect = (selector) => {
+        const item = row.querySelector(selector);
+        const box = item.getBoundingClientRect();
+        return { left: box.left, right: box.right, width: box.width };
+      };
+      const title = row.querySelector('.todo-task-title');
+      return { check: rect('.todo-check'), main: rect('.todo-task-open'), edit: rect('.todo-task-edit'), row: rect('.todo-task-main'), writingMode: getComputedStyle(title).writingMode, scrollWidth: row.scrollWidth, clientWidth: row.clientWidth };
+    });
+    if (bounds.check.width > 44 || bounds.edit.width < 28 || bounds.main.width < 90 || bounds.check.right > bounds.main.left + 1 || bounds.main.right > bounds.edit.left + 1 || bounds.writingMode !== 'horizontal-tb' || bounds.scrollWidth > bounds.clientWidth + 1) {
+      throw new Error(`Inbox task controls overlap or text is constrained at ${width}px: ${JSON.stringify(bounds)}`);
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mobileInboxRow.locator('input[aria-label="子任务：装进包里"]').check();
+  await mobileInboxRow.locator('input[aria-label="子任务：装进包里"]').waitFor({ state: 'attached' });
+  if (await mobileInboxRow.locator('input[aria-label="子任务：装进包里"]').isChecked() !== true) throw new Error('Mobile inline subtask did not remain checked');
+  await mobileInboxRow.getByRole('button', { name: '打开任务：移动浏览器任务' }).tap();
+  const mobileEditor = page.getByRole('dialog', { name: '编辑任务' });
+  await mobileEditor.waitFor();
+  if (await page.locator('.todo-module-root').getAttribute('inert') === null) throw new Error('The editor overlay left the Todo page interactive underneath');
+  const editorTitleFocused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === '任务标题');
+  await mobileEditor.getByText('更多设置').tap();
+  const editorLayout = await page.evaluate(() => {
+    const dialog = document.querySelector('.todo-editor');
+    const header = dialog.querySelector('.todo-subpage-header');
+    const footer = dialog.querySelector('.todo-form-actions');
+    const scroll = dialog.querySelector('.todo-editor-scroll');
+    const before = { headerTop: header.getBoundingClientRect().top, footerBottom: footer.getBoundingClientRect().bottom };
+    scroll.scrollTop = scroll.scrollHeight;
+    const after = { headerTop: header.getBoundingClientRect().top, footerBottom: footer.getBoundingClientRect().bottom };
+    return { before, after, viewportHeight: window.innerHeight, contentHeight: scroll.scrollHeight, scrollHeight: scroll.clientHeight };
+  });
+  if (!editorTitleFocused || Math.abs(editorLayout.before.headerTop - editorLayout.after.headerTop) > 1 || Math.abs(editorLayout.before.footerBottom - editorLayout.after.footerBottom) > 1 || editorLayout.after.footerBottom > editorLayout.viewportHeight + 1 || editorLayout.contentHeight < editorLayout.scrollHeight) {
+    throw new Error(`Mobile editor fixed controls or keyboard-sized scrolling failed: ${JSON.stringify(editorLayout)}`);
+  }
   await page.goBack();
   await page.getByRole('region', { name: '待办' }).waitFor();
   await page.getByRole('tab', { name: '今天' }).tap();

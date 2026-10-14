@@ -53,27 +53,37 @@ function DemoNotice({ children }: { children: ReactNode }) {
   return <p className="todo-demo-note">{children}</p>;
 }
 
-function TaskLine({ task, onToggle, onOpen, tagNames }: { task: TaskInstance; onToggle: () => void; onOpen: () => void; tagNames: Map<string, string> }) {
+function TaskLine({ task, onToggle, onToggleSubtask, onOpen, tagNames }: { task: TaskInstance; onToggle: () => void; onToggleSubtask: (subtaskId: string, checked: boolean) => void; onOpen: (trigger: HTMLElement) => void; tagNames: Map<string, string> }) {
   const done = isDone(task);
   return <div className={"todo-task-row " + (done ? "is-done" : "")} data-task-key={task.instanceKey}>
     <button className="todo-check" aria-label={(done ? "恢复任务：" : "完成任务：") + task.title} aria-pressed={done} onClick={onToggle}><Icon name="check"/></button>
-    <button className="todo-task-open" onClick={onOpen}>
-      <span className="todo-task-title">{task.title}</span>
-      {task.scheduledTime && <span className="todo-task-time"><Icon name="clock"/>{task.scheduledTime}</span>}
-      {!!task.tags.length && <span className="todo-task-tags">{task.tags.map((id) => tagNames.get(id)).filter(Boolean).slice(0, 2).map((name) => <span key={name}>{name}</span>)}</span>}
-      {!!task.subtasks.length && <span className="todo-task-subtask-count">{task.subtasks.filter((item) => item.checked).length}/{task.subtasks.length} 子任务</span>}
-    </button>
-    <button className="todo-task-edit" onClick={onOpen} aria-label={"编辑任务：" + task.title}><Icon name="chevron"/></button>
+    <div className="todo-task-main">
+      <button type="button" className="todo-task-open" onClick={(event) => onOpen(event.currentTarget)} aria-label={"打开任务：" + task.title}>
+        <span className="todo-task-title">{task.title}</span>
+        <span className="todo-task-meta">
+          {task.scheduledTime && <span className="todo-task-time"><Icon name="clock"/>{task.scheduledTime}</span>}
+          {!!task.tags.length && <span className="todo-task-tags">{task.tags.map((id) => tagNames.get(id)).filter(Boolean).slice(0, 2).map((name) => <span key={name}>{name}</span>)}</span>}
+          {!!task.subtasks.length && <span className="todo-task-subtask-count">{task.subtasks.filter((item) => item.checked).length}/{task.subtasks.length} 子任务</span>}
+        </span>
+      </button>
+      {!!task.subtasks.length && <div className="todo-task-subtasks" aria-label={task.title + "的子任务"}>
+        {task.subtasks.map((subtask) => <label key={subtask.id} className={subtask.checked ? "is-checked" : ""}>
+          <input type="checkbox" checked={subtask.checked} aria-label={"子任务：" + (subtask.title || "未命名")} onChange={(event) => onToggleSubtask(subtask.id, event.target.checked)}/>
+          <span>{subtask.title}</span>
+        </label>)}
+      </div>}
+    </div>
+    <button type="button" className="todo-task-edit" onClick={(event) => onOpen(event.currentTarget)} aria-label={"编辑任务：" + task.title}><Icon name="chevron"/></button>
   </div>;
 }
 
 function PersonalHome({
   view, onView, onShiftPeriod, onResetPeriod, periodAnchor, inboxOpen, onInbox, hideCompleted, onHideCompleted, tasks, inboxTasks, overdueTasks,
-  onToggleTask, onEditTask, focusDate, focusOpen, onFocusDate, onCloseFocus, onOpenAdd, tags, toggleRef
+  onToggleTask, onToggleSubtask, onEditTask, focusDate, focusOpen, onFocusDate, onCloseFocus, onOpenAdd, tags, toggleRef
 }: {
   view: TimeView; onView: (view: TimeView) => void; onShiftPeriod: (delta: number) => void; onResetPeriod: () => void; periodAnchor: DateKey;
   inboxOpen: boolean; onInbox: () => void; hideCompleted: boolean; onHideCompleted: () => void;
-  tasks: TaskInstance[]; inboxTasks: TaskInstance[]; overdueTasks: TaskInstance[]; onToggleTask: (task: TaskInstance) => void; onEditTask: (task: TaskInstance) => void;
+  tasks: TaskInstance[]; inboxTasks: TaskInstance[]; overdueTasks: TaskInstance[]; onToggleTask: (task: TaskInstance) => void; onToggleSubtask: (task: TaskInstance, subtaskId: string, checked: boolean) => void; onEditTask: (task: TaskInstance, trigger: HTMLElement) => void;
   focusDate: DateKey | null; focusOpen: boolean; onFocusDate: (date: DateKey) => void; onCloseFocus: () => void; onOpenAdd: (date: DateKey | null) => void;
   tags: PersonalTag[]; toggleRef?: (button: HTMLButtonElement | null) => void;
 }) {
@@ -102,7 +112,7 @@ function PersonalHome({
     const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
     if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.35) onShiftPeriod(dx < 0 ? 1 : -1);
   };
-  const taskLine = (task: TaskInstance) => <TaskLine key={task.instanceKey} task={task} tagNames={tagNames} onToggle={() => onToggleTask(task)} onOpen={() => onEditTask(task)}/>;
+  const taskLine = (task: TaskInstance) => <TaskLine key={task.instanceKey} task={task} tagNames={tagNames} onToggle={() => onToggleTask(task)} onToggleSubtask={(subtaskId, checked) => onToggleSubtask(task, subtaskId, checked)} onOpen={(trigger) => onEditTask(task, trigger)}/>;
 
   return <div className="todo-personal-content" data-space-ui="personal">
     <header className="todo-page-header">
@@ -246,6 +256,29 @@ function PersonalEditor({ task, baseTask, tags, onBack, onSave, onDelete, onAddT
   const [tagError, setTagError] = useState("");
   const dayNames = ["日", "一", "二", "三", "四", "五", "六"];
   const isSeriesEditor = !recurringInstance || scope === "series";
+  const existingRule = baseTask.recurrence;
+  const defaultWeekday = existingRule ? fromDateKey(existingRule.startsOn).getDay() : -1;
+  const hasAdvancedRule = !!existingRule && (existingRule.interval !== 1 || existingRule.endsOn !== null || (existingRule.frequency === "weekly" && (existingRule.weekdays.length !== 1 || existingRule.weekdays[0] !== defaultWeekday)));
+  const [advancedRepeatOpen, setAdvancedRepeatOpen] = useState(hasAdvancedRule);
+  const editorRef = useRef<HTMLFormElement>(null);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    editor?.querySelector<HTMLInputElement>('[aria-label="任务标题"]')?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onBackRef.current(); return; }
+      if (event.key !== "Tab" || !editorRef.current) return;
+      const items = [...editorRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary')]
+        .filter((item) => item.getAttribute("aria-hidden") !== "true" && item.offsetParent !== null);
+      if (!items.length) return;
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus(); }
+      else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!dirty || !guardActive) return;
@@ -331,27 +364,38 @@ function PersonalEditor({ task, baseTask, tags, onBack, onSave, onDelete, onAddT
     } catch (error) { setTagError(error instanceof Error ? error.message : "标签保存失败。"); }
   };
 
-  return <form className="todo-subpage todo-editor" onSubmit={(event) => void submit(event)} onChange={() => { dirtyRef.current = true; setDirty(true); }}>
-    <header className="todo-subpage-header"><button type="button" className="todo-back-button" onClick={leave} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">PERSONAL TASK</p><h1>编辑任务</h1></div><span className="todo-editor-space">个人待办</span></header>
-    {recurringInstance && <fieldset className="todo-editor-scope"><legend>修改范围</legend><label><input type="radio" name="edit-scope" checked={scope === "occurrence"} onChange={() => { setScope("occurrence"); if (task.scheduledDate) setDate(task.scheduledDate); }}/>仅此周期</label><label><input type="radio" name="edit-scope" checked={scope === "series"} onChange={() => { setScope("series"); if (task.periodDate) setDate(task.periodDate); }}/>此周期及之后（保留过往记录）</label></fieldset>}
-    <label className="todo-form-field"><span>标题</span><input value={title} onChange={(event) => change(setTitle, event.target.value)} aria-label="任务标题" required/></label>
-    <div className="todo-form-grid"><label className="todo-form-field"><span>{isSeriesEditor && frequency !== "none" ? "开始日期" : "日期"}</span><input type="date" value={date} onChange={(event) => change(setDate, event.target.value)} aria-label="任务日期"/></label><label className="todo-form-field"><span>具体时间</span><input type="time" value={time} onChange={(event) => change(setTime, event.target.value)} aria-label="具体时间"/></label></div>
-    <label className="todo-form-field"><span>备注</span><textarea rows={3} value={note} onChange={(event) => change(setNote, event.target.value)} placeholder="写下需要记住的细节" aria-label="备注"/></label>
-    {isSeriesEditor && <section className="todo-form-field"><label htmlFor="todo-recurrence"><span><Icon name="repeat"/>重复规则</span></label><select id="todo-recurrence" value={frequency} onChange={(event) => { setFrequency(event.target.value as typeof frequency); setDirty(true); }}><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月（同一日，不存在时跳过）</option></select>
-      {frequency !== "none" && <div className="todo-repeat-options"><label>每 <input type="number" min="1" max="365" value={interval} onChange={(event) => change(setInterval, Number(event.target.value))}/> {frequency === "daily" ? "天" : frequency === "weekly" ? "周" : "个月"}</label>
-        {frequency === "weekly" && <div className="todo-weekday-options" aria-label="选择重复星期">{dayNames.map((name, index) => <button type="button" key={index} aria-pressed={weekdays.includes(index)} className={weekdays.includes(index) ? "selected" : ""} onClick={() => toggleWeekday(index)}>{name}</button>)}</div>}
-        <label className="todo-repeat-end">结束日期（可选）<input type="date" value={endsOn} min={date || undefined} onChange={(event) => change(setEndsOn, event.target.value)}/></label>
-      </div>}
-    </section>}
-    <section className="todo-form-field"><span><Icon name="bell"/>提醒</span><label className="todo-setting-row" htmlFor="todo-reminder"><span>开启提醒</span><input id="todo-reminder" type="checkbox" checked={reminderEnabled} onChange={(event) => change(setReminderEnabled, event.target.checked)}/></label>
-      {reminderEnabled && <><label>提前 <select value={minutesBefore} onChange={(event) => change(setMinutesBefore, Number(event.target.value))}><option value="0">准时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select></label><div className="todo-reminder-capability"><span>{permission === "granted" ? "通知权限已允许" : permission === "denied" ? "通知权限已拒绝，可在浏览器设置中更改" : permission === "unsupported" ? "浏览器不支持通知，提醒会保留但无法弹出" : "网页打开时可尝试提醒；关闭网页后不保证触发"}</span>{permission !== "granted" && permission !== "unsupported" && <button type="button" onClick={() => void requestNotificationPermission()}>允许浏览器通知</button>}</div></>}
-    </section>
-    <section className="todo-form-field"><span><Icon name="tag"/>个人标签</span><div className="todo-editor-tags">{tags.map((tag) => <button type="button" className={selectedTags.includes(tag.id) ? "active" : ""} aria-pressed={selectedTags.includes(tag.id)} key={tag.id} onClick={() => toggleTag(tag.id)}>{tag.name}</button>)}</div>
-      <div className="todo-create-tag"><input value={tagInput} onChange={(event) => { setTagInput(event.target.value); setDirty(true); }} placeholder="新标签名称" aria-label="新标签名称"/><button type="button" onClick={() => void addTag()} disabled={!tagInput.trim()}>添加标签</button></div>{tagError && <p className="todo-field-error">{tagError}</p>}
-    </section>
-    <section className="todo-form-field"><span><Icon name="subtask"/>子任务</span><div className="todo-subtasks">{subtasks.map((item) => <label key={item.id}><input type="checkbox" checked={item.checked} onChange={(event) => updateSubtask(item.id, { checked: event.target.checked })}/><input value={item.title} onChange={(event) => updateSubtask(item.id, { title: event.target.value })} placeholder="子任务标题" aria-label="子任务标题"/></label>)}<button type="button" className="todo-add-subtask" onClick={addSubtask}>＋ 添加子任务</button></div></section>
-    <div className="todo-editor-danger"><button type="button" className="todo-delete-button" onClick={() => void remove("occurrence")}>{recurringInstance ? "跳过这一次" : "删除任务"}</button>{recurringInstance && <button type="button" className="todo-delete-button" onClick={() => void remove("series")}>删除整个系列</button>}</div>
-    <p className="todo-form-disclaimer">个人任务和标签保存在本机 IndexedDB。网页关闭后不会可靠发送提醒。</p>
+  const repeatSummary = frequency === "none" ? "不重复" : frequency === "daily"
+    ? `${interval === 1 ? "每天" : `每 ${interval} 天`}${endsOn ? ` · 到 ${endsOn} 结束` : ""}`
+    : frequency === "weekly"
+      ? `${interval === 1 ? "每周" : `每 ${interval} 周`} · ${weekdays.map((day) => `周${dayNames[day]}`).join("、") || "未选择星期"}${endsOn ? ` · 到 ${endsOn} 结束` : ""}`
+      : `${interval === 1 ? "每月" : `每 ${interval} 个月`} · 同一日期${endsOn ? ` · 到 ${endsOn} 结束` : ""}`;
+
+  return <form ref={editorRef} className="todo-subpage todo-editor" role="dialog" aria-modal="true" aria-labelledby="todo-editor-title" onSubmit={(event) => void submit(event)} onChange={() => { dirtyRef.current = true; setDirty(true); }}>
+    <header className="todo-subpage-header"><button type="button" className="todo-back-button" onClick={leave} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">PERSONAL TASK</p><h1 id="todo-editor-title">编辑任务</h1></div><span className="todo-editor-space">个人待办</span></header>
+    <div className="todo-editor-scroll">
+      {recurringInstance && <fieldset className="todo-editor-scope"><legend>修改范围</legend><label><input type="radio" name="edit-scope" checked={scope === "occurrence"} onChange={() => { setScope("occurrence"); if (task.scheduledDate) setDate(task.scheduledDate); }}/>仅此周期</label><label><input type="radio" name="edit-scope" checked={scope === "series"} onChange={() => { setScope("series"); if (task.periodDate) setDate(task.periodDate); }}/>此周期及之后</label><p>之前周期的完成记录会保留。</p></fieldset>}
+      <label className="todo-form-field"><span>标题</span><input value={title} onChange={(event) => change(setTitle, event.target.value)} aria-label="任务标题" required/></label>
+      <div className="todo-form-grid"><label className="todo-form-field"><span>{isSeriesEditor && frequency !== "none" ? "开始日期" : "日期"}</span><input type="date" value={date} onChange={(event) => change(setDate, event.target.value)} aria-label="任务日期"/></label><label className="todo-form-field"><span>具体时间</span><input type="time" value={time} onChange={(event) => change(setTime, event.target.value)} aria-label="具体时间"/></label></div>
+      <section className="todo-form-field todo-editor-subtask-field"><span><Icon name="subtask"/>子任务</span><div className="todo-subtasks">{subtasks.map((item) => <div key={item.id} className="todo-subtask-editor-row"><input type="checkbox" checked={item.checked} onChange={(event) => updateSubtask(item.id, { checked: event.target.checked })}/><input value={item.title} onChange={(event) => updateSubtask(item.id, { title: event.target.value })} placeholder="子任务标题" aria-label="子任务标题"/><button type="button" className="todo-remove-subtask" aria-label={"删除子任务：" + (item.title || "未命名")} onClick={() => change(setSubtasks, subtasks.filter((subtask) => subtask.id !== item.id))}><Icon name="close"/></button></div>)}<button type="button" className="todo-add-subtask" onClick={addSubtask}>＋ 添加子任务</button></div></section>
+      <details className="todo-editor-more"><summary>更多设置<span>备注、重复、提醒与标签</span></summary><div className="todo-editor-more-content">
+        <label className="todo-form-field"><span>备注</span><textarea rows={3} value={note} onChange={(event) => change(setNote, event.target.value)} placeholder="写下需要记住的细节" aria-label="备注"/></label>
+        {isSeriesEditor && <section className="todo-form-field todo-recurrence-field"><label htmlFor="todo-recurrence"><span><Icon name="repeat"/>重复规则</span></label><select id="todo-recurrence" aria-label="重复规则" value={frequency} onChange={(event) => { const next = event.target.value as typeof frequency; setFrequency(next); if (next === "weekly" && !weekdays.length) setWeekdays([fromDateKey((date || task.scheduledDate || todayKey()) as DateKey).getDay()]); setDirty(true); }}><option value="none">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option></select>
+          <p className="todo-repeat-summary" aria-live="polite">{repeatSummary}{frequency === "monthly" && <small> · 当月不存在该日期时会跳过</small>}</p>
+          {frequency !== "none" && <details className="todo-repeat-advanced" open={advancedRepeatOpen} onToggle={(event) => setAdvancedRepeatOpen(event.currentTarget.open)}><summary>高级设置</summary><div className="todo-repeat-options"><label>每 <input type="number" min="1" max="365" value={interval} aria-label="重复间隔" onChange={(event) => change(setInterval, Number(event.target.value))}/> {frequency === "daily" ? "天" : frequency === "weekly" ? "周" : "个月"}</label>
+            {frequency === "weekly" && <div className="todo-weekday-options" aria-label="选择重复星期">{dayNames.map((name, index) => <button type="button" key={index} aria-pressed={weekdays.includes(index)} className={weekdays.includes(index) ? "selected" : ""} onClick={() => toggleWeekday(index)}>周{name}</button>)}</div>}
+            <label className="todo-repeat-end">结束日期（可选）<input type="date" value={endsOn} min={date || undefined} aria-label="重复结束日期" onChange={(event) => change(setEndsOn, event.target.value)}/></label>
+          </div></details>}
+        </section>}
+        <section className="todo-form-field"><span><Icon name="bell"/>提醒</span><label className="todo-setting-row" htmlFor="todo-reminder"><span>开启提醒</span><input id="todo-reminder" type="checkbox" checked={reminderEnabled} onChange={(event) => change(setReminderEnabled, event.target.checked)}/></label>
+          {reminderEnabled && <><label>提前 <select value={minutesBefore} onChange={(event) => change(setMinutesBefore, Number(event.target.value))}><option value="0">准时</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select></label><div className="todo-reminder-capability"><span>{permission === "granted" ? "通知权限已允许" : permission === "denied" ? "通知权限已拒绝，可在浏览器设置中更改" : permission === "unsupported" ? "浏览器不支持通知，提醒会保留但无法弹出" : "网页打开时可尝试提醒；关闭网页后不保证触发"}</span>{permission !== "granted" && permission !== "unsupported" && <button type="button" onClick={() => void requestNotificationPermission()}>允许浏览器通知</button>}</div></>}
+        </section>
+        <section className="todo-form-field"><span><Icon name="tag"/>个人标签</span><div className="todo-editor-tags">{tags.map((tag) => <button type="button" className={selectedTags.includes(tag.id) ? "active" : ""} aria-pressed={selectedTags.includes(tag.id)} key={tag.id} onClick={() => toggleTag(tag.id)}>{tag.name}</button>)}</div>
+          <div className="todo-create-tag"><input value={tagInput} onChange={(event) => { setTagInput(event.target.value); setDirty(true); }} placeholder="新标签名称" aria-label="新标签名称"/><button type="button" onClick={() => void addTag()} disabled={!tagInput.trim()}>添加标签</button></div>{tagError && <p className="todo-field-error">{tagError}</p>}
+        </section>
+      </div></details>
+      <div className="todo-editor-danger"><button type="button" className="todo-delete-button" onClick={() => void remove("occurrence")}>{recurringInstance ? "跳过这一次" : "删除任务"}</button>{recurringInstance && <button type="button" className="todo-delete-button" onClick={() => void remove("series")}>删除整个系列</button>}</div>
+      <p className="todo-form-disclaimer">个人任务和标签保存在本机 IndexedDB。网页关闭后不会可靠发送提醒。</p>
+    </div>
     <div className="todo-form-actions"><button type="button" className="todo-secondary-button" onClick={leave}>取消</button><button className="todo-primary-button" type="submit" disabled={!title.trim() || saving}>{saving ? "保存中…" : "保存"}</button></div>
   </form>;
 }
@@ -446,6 +490,8 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const [ripple, setRipple] = useState<RippleState | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const spaceToggleRef = useRef<HTMLButtonElement>(null);
+  const editorTriggerRef = useRef<HTMLElement | null>(null);
+  const editorOriginScreen = useRef<TodoScreen>("home");
   const focusSpaceAfterChange = useRef<TodoSpace | null>(null);
   const rippleBusy = useRef(false);
   const finishRippleRef = useRef<() => void>(() => undefined);
@@ -595,6 +641,17 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const isFocusScreen = snapshot.todoScreen === "personal-month-focus";
   const isPersonalEditor = snapshot.todoScreen === "personal-editor";
   const isHomeScreen = snapshot.todoScreen === "home";
+  const wasPersonalEditor = useRef(isPersonalEditor);
+
+  useEffect(() => {
+    if (wasPersonalEditor.current && !isPersonalEditor && active) {
+      const trigger = editorTriggerRef.current;
+      requestAnimationFrame(() => {
+        if (trigger?.isConnected && !trigger.closest("[inert]")) trigger.focus({ preventScroll: true });
+      });
+    }
+    wasPersonalEditor.current = isPersonalEditor;
+  }, [active, isPersonalEditor]);
   const currentDay = todayKey();
   const monthFirst = (periodAnchor.slice(0, 7) + "-01") as DateKey;
   const from = view === "today" ? periodAnchor : view === "week" ? startOfWeek(periodAnchor) : monthFirst;
@@ -627,7 +684,19 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     } catch (error) { onNotice(error instanceof Error ? error.message : "任务状态更新失败，请重试。"); }
   };
 
-  const openTaskEditor = (task: TaskInstance) => { setSelectedTask(task); onScreenChange("personal-editor"); };
+  const handleSubtaskToggle = async (task: TaskInstance, subtaskId: string, checked: boolean) => {
+    try {
+      await todoRepository.setSubtaskChecked(task.taskId, task.periodDate, subtaskId, checked);
+      await refreshData();
+    } catch (error) { onNotice(error instanceof Error ? error.message : "子任务状态更新失败，请重试。"); }
+  };
+
+  const openTaskEditor = (task: TaskInstance, trigger: HTMLElement) => {
+    editorTriggerRef.current = trigger;
+    editorOriginScreen.current = snapshot.todoScreen;
+    setSelectedTask(task);
+    onScreenChange("personal-editor");
+  };
 
   const savePersonalTask = async (draft: TaskDraft, scope: EditorScope, periodDate: DateKey | null) => {
     if (!selectedInstance || !selectedBase) throw new Error("找不到正在编辑的任务，请刷新后重试。");
@@ -698,17 +767,15 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     view, onView: changeView, onShiftPeriod: shiftPeriod, onResetPeriod: resetPeriod, periodAnchor, inboxOpen,
     onInbox: () => setInboxOpen((open) => !open), hideCompleted, onHideCompleted: () => setHideCompleted((hidden) => !hidden),
     tasks: rangeInstances, inboxTasks: inboxInstances, overdueTasks: view === "today" && periodAnchor === currentDay ? overdueInstances : [],
-    onToggleTask: (task: TaskInstance) => void handleTaskToggle(task), onEditTask: openTaskEditor,
-    focusDate, focusOpen: isFocusScreen, onFocusDate: chooseFocusDate, onCloseFocus: onBack, onOpenAdd: openPersonalAdd, tags: personalTags
+    onToggleTask: (task: TaskInstance) => void handleTaskToggle(task), onToggleSubtask: (task: TaskInstance, id: string, checked: boolean) => void handleSubtaskToggle(task, id, checked), onEditTask: openTaskEditor,
+    focusDate, focusOpen: isFocusScreen || (isPersonalEditor && editorOriginScreen.current === "personal-month-focus"), onFocusDate: chooseFocusDate, onCloseFocus: onBack, onOpenAdd: openPersonalAdd, tags: personalTags
   };
 
   const captureToggleButton = (button: HTMLButtonElement | null) => { if (button) spaceToggleRef.current = button; };
   const personalHome = <PersonalHome {...personalHomeProps} toggleRef={captureToggleButton}/>;
   const coupleHome = <CoupleHome expandedCard={expandedCard} onExpand={(id) => setExpandedCard((current) => current === id ? null : id)} onEdit={() => onScreenChange("couple-editor")} selectedTags={selectedTags} onToggleTag={(tag) => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])} onHistory={() => onScreenChange("couple-history")} onNotice={onNotice} toggleRef={captureToggleButton}/>;
   let layout: ReactNode;
-  if (isPersonalEditor && selectedInstance && selectedBase) {
-    layout = <PersonalEditor task={selectedInstance} baseTask={selectedBase} tags={personalTags} onBack={onBack} onSave={savePersonalTask} onDelete={deletePersonalTask} onAddTag={addPersonalTag} onNotice={onNotice} guardActive={active && snapshot.surfaces.length === 0}/>;
-  } else if (snapshot.todoScreen === "couple-editor") {
+  if (snapshot.todoScreen === "couple-editor") {
     layout = <CoupleEditor onBack={onBack} onSaved={() => onNotice("情侣事项仍为演示内容，未写入数据。")}/>;
   } else if (snapshot.todoScreen === "couple-history") {
     layout = <CoupleHistory selectedTags={selectedTags} onToggleTag={(tag) => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])} range={historyRange} onRange={() => showSurface("history-filter")} onBack={onBack}/>;
@@ -718,6 +785,7 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     layout = personalHome;
   }
   const dialogKind = showQuickAdd ? currentOverlay as "todo-add-personal" | "todo-add-couple" : showRangeDialog ? "history-filter" : null;
+  const personalEditorOverlay = active && isPersonalEditor && selectedInstance && selectedBase ? createPortal(<div className="todo-editor-overlay"><div className="todo-editor-sheet"><PersonalEditor task={selectedInstance} baseTask={selectedBase} tags={personalTags} onBack={onBack} onSave={savePersonalTask} onDelete={deletePersonalTask} onAddTag={addPersonalTag} onNotice={onNotice} guardActive={snapshot.surfaces.length === 0}/></div></div>, document.body) : null;
   const handleRootToggle = (event: MouseEvent<HTMLDivElement>) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-space-toggle='true']");
     if (!button) return;
@@ -733,13 +801,14 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   </div>;
 
   return <>
-    <div ref={rootRef} className="todo-module-root" data-current-space={snapshot.todoSpace} data-loading={dataLoading ? "true" : "false"} aria-busy={rippleBusy.current} inert={!!ripple} onClick={isHomeScreen ? handleRootToggle : undefined}>
+    <div ref={rootRef} className="todo-module-root" data-current-space={snapshot.todoSpace} data-loading={dataLoading ? "true" : "false"} aria-busy={rippleBusy.current} aria-hidden={isPersonalEditor || undefined} inert={!!ripple || isPersonalEditor} onClick={isHomeScreen ? handleRootToggle : undefined}>
       <section className={"todo-module-page todo-page-" + snapshot.todoSpace} aria-label={snapshot.todoSpace === "personal" ? "待办" : "我们的小事"}>
         {dataError && snapshot.todoSpace === "personal" && <p className="todo-data-error" role="alert">{dataError} 请检查存储空间后重试。 <button type="button" onClick={() => { setDataLoading(true); void refreshData().catch((error: unknown) => { setDataLoading(false); setDataError(error instanceof Error ? error.message : "读取失败。"); }); }}>重试</button></p>}
         {layout}
       </section>
     </div>
     {preview && createPortal(preview, document.body)}
+    {personalEditorOverlay}
     {active && isHomeScreen && !dialogKind && !ripple && <FloatingAdd space={snapshot.todoSpace} onClick={() => snapshot.todoSpace === "personal" ? openPersonalAdd(null) : showSurface("todo-add-couple")}/>}
     {active && dialogKind && <TodoDialog kind={dialogKind} onBack={onBack} onNotice={onNotice} onRangeChange={setHistoryRange} range={historyRange} targetDate={quickTargetDate} onCreatePersonal={createPersonalTask}/>}
     {active && quickMessage && <div className="todo-live-message" role="status">{quickMessage}</div>}
