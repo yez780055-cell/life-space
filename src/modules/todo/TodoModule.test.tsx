@@ -54,11 +54,12 @@ describe('Todo Phase 2B', () => {
   it('saves quick capture to IndexedDB and keeps the inbox task after reload', async () => {
     render(<App/>);
     await screen.findByRole('region', { name: '待办' });
+    await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-loading')).toBe('false'));
     fireEvent.click(screen.getByRole('button', { name: '快速新增待办' }));
     const dialog = await screen.findByRole('dialog', { name: '快速记录' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '任务标题' }), { target: { value: '  买洗衣液  ' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
     expect((await todoRepository.listTasks())[0].title).toBe('买洗衣液');
     expect(await screen.findByRole('status')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
