@@ -21,6 +21,12 @@
 
 ## 线上预览与 CI
 
-PR/CI 与 GitHub Pages 工作流链接、提交 SHA、浏览器覆盖结果和截图 artifact 将在分支推送后补录。Pages 只有一个站点：Phase 2B 工作流只由 `feat/todo-phase-2b` 推送触发；旧 `feat/todo-phase-2a` 分支的工作流已改为监听 Phase 2B 分支，旧分支推送不会重新部署。部署日志会打印部署分支和 `$GITHUB_SHA`。预览地址：<https://yez780055-cell.github.io/life-space/>。
+PR：[Life Space Phase 2B：个人待办与周期任务 #3](https://github.com/yez780055-cell/life-space/pull/3)，目标为 `main`，保持 open。
+
+- `Foundation Web checks` [运行 #19](https://github.com/yez780055-cell/life-space/actions/runs/38516793245)：对提交 `126d0a4e944ad02e837ab940352e27be74533111` 全部通过，包含 TypeScript、ESLint、Vitest（6 个文件、41 项）、production build，以及安装 Chromium 后的生产浏览器验证。截图 artifact 名为 `todo-phase-2b-browser-screenshots`。
+- `Todo Phase 2A Web preview` [运行 #16](https://github.com/yez780055-cell/life-space/actions/runs/38516788320)：对同一提交成功部署；工作流名称沿用 Phase 2A，但当前触发分支是 `feat/todo-phase-2b`，日志打印部署分支与 `$GITHUB_SHA`。
+- 浏览器验证覆盖 GitHub Pages 子路径 `/life-space/`、桌面 1440×900、触控手机 390×844，以及日期聚焦月历 320、360、390、430px 宽度。通过的路径包括任务新增与编辑、周期切换与重置、收集箱展开收起、空间涟漪往返、页面层级返回、情侣历史筛选、全局 Tab、滚动恢复、刷新与 PWA scope/离线刷新。
+
+Pages 只有一个站点：推送 `feat/todo-phase-2b` 会替换此开发预览；旧 `feat/todo-phase-2a` 分支推送不再触发部署。预览地址：<https://yez780055-cell.github.io/life-space/>。
 
 该预览用于网页开发验收，不代表合并或正式发布。没有进行 Android APK 构建或真机测试。
