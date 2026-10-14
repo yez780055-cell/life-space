@@ -1,8 +1,8 @@
-name: Foundation Web preview
+name: Todo Phase 2A Web preview
 
 on:
   push:
-    branches: [feat/foundation]
+    branches: [feat/todo-phase-2a]
 
 permissions:
   contents: read
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: foundation-pages-preview
+  group: life-space-pages-preview
   cancel-in-progress: true
 
 jobs:

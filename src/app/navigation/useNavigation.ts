@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as NativeApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { initialSnapshot, openGuide, openSurface, switchModule, type NavigationSnapshot, type Surface } from './model';
+import { initialSnapshot, openGuide, openSurface, switchModule, type NavigationSnapshot, type Surface, type TodoScreen, type TodoSpace } from './model';
 import { saveLastModule, type ModuleId } from '../../shared/storage/settings';
 
 const HISTORY_KEY = '__lifeSpaceFoundation';
@@ -20,7 +20,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const depth = useRef(0);
   const epoch = useRef(0);
   const current = useRef(snapshot);
-  const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages'] } | null>(null);
+  const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen'] } | null>(null);
   const pendingBack = useRef(false);
   const lastExit = useRef(0);
   const bootStarted = useRef(false);
@@ -34,11 +34,17 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
 
   const commitTab = useCallback((module: ModuleId, pages: NavigationSnapshot['pages'], base: NavigationSnapshot) => {
     epoch.current += 1;
-    const root = switchModule({ ...base, pages: { ...pages, [module]: 'home' } }, module);
+    const todoScreenToRestore = base.todoScreen;
+    const root = switchModule({ ...base, pages: { ...pages, [module]: 'home' }, ...(module === 'todo' ? { todoScreen: 'home' as const } : {}) }, module);
     depth.current = 0;
     history.replaceState(entry(root, 0), '');
     if (pages[module] === 'guide') {
       const detail = openGuide(root);
+      depth.current = 1;
+      history.pushState(entry(detail, 1), '');
+      setCurrent(detail);
+    } else if (module === 'todo' && todoScreenToRestore !== 'home') {
+      const detail = { ...root, todoScreen: todoScreenToRestore };
       depth.current = 1;
       history.pushState(entry(detail, 1), '');
       setCurrent(detail);
@@ -71,9 +77,9 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       }
       pendingBack.current = false;
       if (pendingTab.current) {
-        const { module, pages } = pendingTab.current;
+        const { module, pages, todoSpace, todoScreen } = pendingTab.current;
         pendingTab.current = null;
-        commitTab(module, pages, state.snapshot);
+        commitTab(module, pages, { ...state.snapshot, todoSpace, todoScreen });
       } else if (state.epoch !== epoch.current) {
         // A tab switch can leave old child entries ahead of the root. Bounce
         // back to the root instead of turning the stale entry into a phantom root.
@@ -123,7 +129,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     if (pendingTab.current || pendingBack.current) return;
     // Return to the app's root history entry before replacing the active tab.
     if (depth.current > 0) {
-      pendingTab.current = { module, pages: current.current.pages };
+      pendingTab.current = { module, pages: current.current.pages, todoSpace: current.current.todoSpace, todoScreen: current.current.todoScreen };
       history.go(-depth.current);
     } else {
       commitTab(module, current.current.pages, current.current);
@@ -134,6 +140,14 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   return {
     snapshot, historyReady, exitHint, selectModule,
     showGuide: () => push(openGuide(current.current)),
+    showTodoSpace: (space: TodoSpace) => {
+      if (current.current.module !== 'todo' || current.current.todoSpace === space || current.current.todoScreen !== 'home') return;
+      push({ ...current.current, todoSpace: space, todoScreen: 'home', surfaces: [] });
+    },
+    showTodoScreen: (screen: TodoScreen) => {
+      if (current.current.module !== 'todo' || current.current.todoScreen === screen) return;
+      push({ ...current.current, todoScreen: screen, surfaces: [] });
+    },
     showSurface: (surface: Surface) => {
       if (current.current.surfaces.includes(surface)) return;
       push(openSurface(current.current, surface));

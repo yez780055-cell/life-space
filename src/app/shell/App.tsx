@@ -8,6 +8,7 @@ import { periodContent } from '../../modules/period';
 import { anniversaryContent } from '../../modules/anniversary';
 import { SettingsPage } from '../settings/SettingsPage';
 import { isAndroidApp } from '../../shared/platform/platform';
+import { TodoModule } from '../../modules/todo/TodoModule';
 
 const content = { todo: todoContent, period: periodContent, anniversary: anniversaryContent };
 
@@ -43,14 +44,16 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ReadyApp({ startModule, onError }: { startModule: ModuleId; onError: (message: string) => void }) {
-  const { snapshot, historyReady, exitHint, selectModule, showGuide, showSurface, back } = useNavigation(startModule, onError);
+  const { snapshot, historyReady, exitHint, selectModule, showGuide, showSurface, showTodoSpace, showTodoScreen, back } = useNavigation(startModule, onError);
   const isSettings = snapshot.surfaces.includes('settings');
   const isAbout = snapshot.surfaces.at(-1) === 'about';
   if (!historyReady) return <div className="loading"><span className="brand-mark"><Icon name="spark"/></span><p>正在打开你的空间…</p></div>;
   return <div className="app-frame">
     <aside className="sidebar" inert={isAbout}><div className="brand"><span className="brand-mark"><Icon name="spark"/></span><span><strong>Life Space</strong><small>开发测试版</small></span></div><p className="sidebar-caption">MY LITTLE WORLD</p><nav aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={`nav-link ${snapshot.module === id ? 'active' : ''}`} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span><span className="nav-dot"/></button>)}</nav><button className="sidebar-settings" disabled={isSettings} onClick={() => showSurface('settings')}><Icon name="settings"/> 设置</button><div className="sidebar-foot">给生活留一点<br/>柔软的空间。</div></aside>
     <main className="main-area" inert={isAbout}><header className="mobile-header"><div className="mobile-brand"><span className="brand-mark"><Icon name="spark"/></span><span>Life Space <small>测试版</small></span></div><button className="icon-button" disabled={isSettings} onClick={() => showSurface('settings')} aria-label="打开设置"><Icon name="settings"/></button></header>
-      {MODULES.map((id) => <div key={id} className={`module-holder ${snapshot.module === id && !isSettings ? 'visible' : ''}`} hidden={snapshot.module !== id || isSettings}><ModulePage module={id} page={snapshot.pages[id]} onGuide={showGuide} onBack={() => void back()}/></div>)}
+      {MODULES.map((id) => <div key={id} className={`module-holder ${snapshot.module === id && !isSettings ? 'visible' : ''}`} hidden={snapshot.module !== id || isSettings}>
+        {id === 'todo' && snapshot.pages.todo === 'home' ? <TodoModule snapshot={snapshot} onSpaceChange={showTodoSpace} onScreenChange={showTodoScreen} showSurface={showSurface} onBack={() => void back()} active={snapshot.module === 'todo' && !isSettings}/> : <ModulePage module={id} page={snapshot.pages[id]} onGuide={showGuide} onBack={() => void back()}/>}
+      </div>)}
       {isSettings && <SettingsPage onBack={() => void back()} onAbout={() => showSurface('about')}/>}
       <nav className="bottom-nav" aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={snapshot.module === id ? 'active' : ''} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span></button>)}</nav>
     </main>

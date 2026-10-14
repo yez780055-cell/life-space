@@ -19,11 +19,11 @@ describe('application navigation', () => {
     expect(screen.getAllByRole('button', { name: '纪念日' }).length).toBeGreaterThan(0);
   });
 
-  it('returns through modal, settings, and child page', async () => {
+  it('returns through modal, settings, and Todo editor page', async () => {
     render(<App/>);
     const page = await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(within(page).getByText('了解这个空间'));
-    await screen.findByText('待办，正在准备中。');
+    fireEvent.click(within(page).getByRole('button', { name: '编辑任务：整理本周工作票据' }));
+    await screen.findByRole('heading', { name: '编辑任务' });
     fireEvent.click(screen.getAllByRole('button', { name: '打开设置' })[0]);
     await screen.findByRole('region', { name: '设置' });
     fireEvent.click(screen.getByText('关于测试版本'));
@@ -33,19 +33,19 @@ describe('application navigation', () => {
     fireEvent.click(within(screen.getByRole('region', { name: '设置' })).getByRole('button', { name: '返回' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: '设置' })).toBeNull());
     fireEvent.click(within(screen.getByRole('region', { name: '待办' })).getByRole('button', { name: '返回' }));
-    await waitFor(() => expect(within(screen.getByRole('region', { name: '待办' })).getByText('你的空间，即将开始。')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('tab', { name: '本周' }).getAttribute('aria-selected')).toBe('true'));
   });
 
   it('restores a module child page after tab switching and returns to its root', async () => {
     render(<App/>);
     const page = await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(within(page).getByText('了解这个空间'));
-    await screen.findByText('待办，正在准备中。');
+    fireEvent.click(within(page).getByRole('button', { name: '编辑任务：整理本周工作票据' }));
+    await screen.findByRole('heading', { name: '编辑任务' });
     fireEvent.click(screen.getAllByRole('navigation', { name: '主要导航' })[0].querySelectorAll('button')[1]);
     await waitFor(() => expect(screen.getByRole('region', { name: '小月历' })).toBeTruthy());
     fireEvent.click(screen.getAllByRole('navigation', { name: '主要导航' })[0].querySelectorAll('button')[0]);
-    await screen.findByText('待办，正在准备中。');
+    await screen.findByRole('heading', { name: '编辑任务' });
     fireEvent.click(within(screen.getByRole('region', { name: '待办' })).getByRole('button', { name: '返回' }));
-    await waitFor(() => expect(within(screen.getByRole('region', { name: '待办' })).getByText('你的空间，即将开始。')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('tab', { name: '本周' }).getAttribute('aria-selected')).toBe('true'));
   });
 });
