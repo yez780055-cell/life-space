@@ -295,6 +295,11 @@ try {
   await page.getByRole('button', { name: '返回个人待办' }).tap();
   await waitForSpace(page, 'personal');
 
+  const scrollFixture = page.locator('.module-holder.visible .todo-module-page');
+  await scrollFixture.evaluate((element) => {
+    const holder = element.closest('.module-holder');
+    element.style.minHeight = `${holder.clientHeight + 180}px`;
+  });
   const initial = await page.locator('.module-holder.visible').evaluate((element) => { element.scrollTop = 120; return element.scrollTop; });
   if (initial < 1) throw new Error('Todo page did not scroll at the mobile viewport');
   await page.locator('.bottom-nav').getByRole('button', { name: '小月历' }).tap();
@@ -305,6 +310,7 @@ try {
   await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
   const restored = await page.locator('.module-holder.visible').evaluate((element) => element.scrollTop);
   if (restored !== initial) throw new Error(`Module scroll was not preserved across navigation: ${initial} -> ${restored}`);
+  await scrollFixture.evaluate((element) => { element.style.minHeight = ''; });
   await page.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(page, 'couple');
   await page.getByRole('button', { name: '查看已完成历史' }).tap();
