@@ -31,7 +31,7 @@ describe('local storage', () => {
     expect(await moduleStorage('anniversary').read('same')).toBeUndefined();
   });
 
-  it('preserves version 1 settings while adding module storage', async () => {
+  it('upgrades version 1 settings and modules to version 3 without dropping existing data', async () => {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, 1);
       request.onupgradeneeded = () => request.result.createObjectStore('settings');
@@ -44,9 +44,25 @@ describe('local storage', () => {
       };
       request.onerror = () => reject(request.error);
     });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 2);
+      request.onupgradeneeded = () => request.result.createObjectStore('modules');
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('modules', 'readwrite');
+        tx.objectStore('modules').put({ preserved: true }, 'period:sample');
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
     const db = await openDatabase();
-    expect(db.version).toBe(2);
+    expect(db.version).toBe(3);
+    expect(['settings', 'modules', 'todoTasks', 'todoTags', 'todoOccurrences'].every((store) => db.objectStoreNames.contains(store))).toBe(true);
+    db.close();
+    resetDatabaseConnectionForTests();
     expect(await readValue('settings', 'lastModule')).toBe('anniversary');
+    expect(await moduleStorage('period').read('sample')).toEqual({ preserved: true });
     await moduleStorage('todo').write('sample', 'kept separate');
     expect(await moduleStorage('todo').read('sample')).toBe('kept separate');
   });

@@ -2,7 +2,7 @@ import { DEFAULT_MODULE, type ModuleId } from '../../shared/storage/settings';
 
 export type Page = 'home' | 'guide';
 export type TodoSpace = 'personal' | 'couple';
-export type TodoScreen = 'home' | 'personal-editor' | 'couple-editor' | 'couple-history';
+export type TodoScreen = 'home' | 'personal-month-focus' | 'personal-editor' | 'couple-editor' | 'couple-history';
 export type Surface = 'settings' | 'about' | 'todo-add-personal' | 'todo-add-couple' | 'history-filter';
 export type NavigationSnapshot = {
   module: ModuleId;

@@ -22,6 +22,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const current = useRef(snapshot);
   const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen'] } | null>(null);
   const pendingTraversal = useRef(false);
+  const guardBounce = useRef(false);
   const todoSpaceForward = useRef(false);
   const lastExit = useRef(0);
   const bootStarted = useRef(false);
@@ -32,6 +33,11 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   }, []);
   const resetExit = useCallback(() => { lastExit.current = 0; setExitHint(false); }, []);
   const entry = useCallback((next: NavigationSnapshot, nextDepth: number): HistoryEntry => ({ [HISTORY_KEY]: id.current, depth: nextDepth, epoch: epoch.current, snapshot: next }), []);
+  const canLeaveCurrent = useCallback(() => {
+    const event = new Event('life-space-navigation-back', { cancelable: true });
+    window.dispatchEvent(event);
+    return !event.defaultPrevented;
+  }, []);
 
   const commitTab = useCallback((module: ModuleId, pages: NavigationSnapshot['pages'], base: NavigationSnapshot) => {
     epoch.current += 1;
@@ -95,7 +101,14 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
         if (state?.[HISTORY_KEY] && state.depth > 0) history.go(-state.depth);
         return;
       }
+      if (guardBounce.current) { guardBounce.current = false; return; }
+      const isProgrammaticTraversal = pendingTraversal.current || pendingTab.current !== null;
       pendingTraversal.current = false;
+      if (!isProgrammaticTraversal && !canLeaveCurrent()) {
+        guardBounce.current = true;
+        history.forward();
+        return;
+      }
       if (pendingTab.current) {
         todoSpaceForward.current = false;
         const { module, pages, todoSpace, todoScreen } = pendingTab.current;
@@ -121,7 +134,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     };
     addEventListener('popstate', onPop);
     return () => { removeEventListener('popstate', onPop); removeEventListener('popstate', onBootPop); };
-  }, [commitTab, entry, setCurrent]);
+  }, [canLeaveCurrent, commitTab, entry, setCurrent]);
 
   const push = useCallback((next: NavigationSnapshot) => {
     resetExit();
@@ -132,6 +145,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   }, [entry, resetExit, setCurrent]);
 
   const back = useCallback(async () => {
+    if (!canLeaveCurrent()) return;
     if (depth.current > 0) {
       if (pendingTraversal.current) return;
       pendingTraversal.current = true;
@@ -151,7 +165,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     lastExit.current = now;
     setExitHint(true);
     window.setTimeout(() => setExitHint(false), EXIT_WINDOW_MS);
-  }, [entry, setCurrent]);
+  }, [canLeaveCurrent, entry, setCurrent]);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -166,6 +180,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
 
   const selectModule = useCallback((module: ModuleId) => {
     if (module === current.current.module && current.current.surfaces.length === 0) return;
+    if (!canLeaveCurrent()) return;
     resetExit();
     if (pendingTab.current || pendingTraversal.current) return;
     todoSpaceForward.current = false;
@@ -177,7 +192,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       commitTab(module, current.current.pages, current.current);
     }
     void saveLastModule(module).catch(() => onError('无法保存上次打开的空间，请检查设备存储'));
-  }, [commitTab, onError, resetExit]);
+  }, [canLeaveCurrent, commitTab, onError, resetExit]);
 
   return {
     snapshot, historyReady, exitHint, selectModule,
@@ -213,6 +228,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       push({ ...current.current, todoScreen: screen, surfaces: [] });
     },
     showSurface: (surface: Surface) => {
+      if (surface === 'settings' && !canLeaveCurrent()) return;
       if (current.current.surfaces.includes(surface) || pendingTraversal.current) return;
       push(openSurface(current.current, surface));
     },
