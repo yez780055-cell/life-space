@@ -188,9 +188,9 @@ try {
   await page.getByRole('tab', { name: '本周' }).tap();
   const timeViewHistoryLength = await page.evaluate(() => window.history.length);
   const inbox = page.getByRole('button', { name: /收集箱/ });
-  await inbox.tap();
+  if (await inbox.getAttribute('aria-expanded') !== 'true') await inbox.tap();
   await page.getByText('移动浏览器任务').waitFor();
-  await inbox.tap();
+  if (await inbox.getAttribute('aria-expanded') === 'true') await inbox.tap();
   if (await page.evaluate(() => window.history.length) !== timeViewHistoryLength) throw new Error('Time view or inbox interaction changed browser history');
   await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
   await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
