@@ -2,6 +2,7 @@ import { openDatabase } from '../../../shared/storage/database';
 import { addDays } from './dates';
 import type { DateKey } from './model';
 import { occurrenceKey, validateTaskDraft, type PersonalTag, type PersonalTask, type TaskDraft, type TaskOccurrence, type TaskOverride } from './model';
+import { occursOn } from './recurrence';
 
 function newId() {
   return globalThis.crypto?.randomUUID?.() ?? `todo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -37,6 +38,11 @@ function syncSubtaskCompletion(subtasks: PersonalTask['subtasks'], completedAt: 
   if (allChecked && !completedAt) return { completedAt: Date.now(), completionSource: 'subtasks' as const };
   if (!allChecked && source === 'subtasks') return { completedAt: null, completionSource: null };
   return { completedAt, completionSource: source };
+}
+
+function isRecurringPeriod(task: PersonalTask, periodDate: DateKey): boolean {
+  const rules = [...task.recurrenceHistory, ...(task.recurrence ? [task.recurrence] : [])];
+  return task.seriesId !== null && rules.some((rule) => occursOn({ ...task, recurrence: rule }, periodDate));
 }
 
 export const todoRepository = {
@@ -125,7 +131,8 @@ export const todoRepository = {
         const task = request.result as PersonalTask | undefined;
         if (!task) return fail(new Error('找不到这项任务，请刷新后重试。'));
         const now = Date.now();
-        if (periodDate && task.recurrence) {
+        if (periodDate) {
+          if (!isRecurringPeriod(task, periodDate)) return fail(new Error('找不到这项重复任务周期，请刷新后重试。'));
           const store = tx.objectStore('todoOccurrences');
           const occurrenceRequest = store.get(occurrenceKey(taskId, periodDate));
           occurrenceRequest.onsuccess = () => {
@@ -157,7 +164,8 @@ export const todoRepository = {
         const task = request.result as PersonalTask | undefined;
         if (!task) return fail(new Error('找不到这项任务，请刷新后重试。'));
         const now = Date.now();
-        if (periodDate && task.recurrence) {
+        if (periodDate) {
+          if (!isRecurringPeriod(task, periodDate)) return fail(new Error('找不到这项重复任务周期，请刷新后重试。'));
           const store = tx.objectStore('todoOccurrences');
           const occurrenceRequest = store.get(occurrenceKey(taskId, periodDate));
           occurrenceRequest.onsuccess = () => {
