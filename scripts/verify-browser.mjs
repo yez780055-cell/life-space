@@ -1,4 +1,4 @@
-/* global process, navigator, console, URL, document, fetch, window */
+/* global process, navigator, console, URL, document, fetch, window, indexedDB */
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 
