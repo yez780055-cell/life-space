@@ -102,7 +102,7 @@ describe('Todo Phase 2B', () => {
     fireEvent.click(screen.getByRole('tab', { name: '今天' }));
     fireEvent.click(await screen.findByRole('button', { name: '完成任务：整理书桌' }));
     await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.completedAt).toBeTypeOf('number'));
-    expect(screen.getByRole('button', { name: '恢复任务：整理书桌' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '恢复任务：整理书桌' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '隐藏已完成' }));
     expect(screen.queryByRole('button', { name: '恢复任务：整理书桌' })).toBeNull();
     expect((await todoRepository.listTasks())).toHaveLength(1);
