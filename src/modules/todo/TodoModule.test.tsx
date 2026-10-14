@@ -150,6 +150,34 @@ describe('Todo Phase 2B', () => {
     });
   });
 
+  it('updates a task-row subtask immediately while IndexedDB persistence is pending', async () => {
+    const task = await todoRepository.saveTask({
+      title: '周五的安排', note: '', scheduledDate: addDays(todayKey(), 2), scheduledTime: null, tags: [],
+      subtasks: [{ id: 'fast-child', title: '带上钥匙', checked: false }], recurrence: null, recurrenceHistory: [],
+      reminder: { enabled: false, minutesBefore: 10 }
+    });
+    const persist = todoRepository.setSubtaskChecked.bind(todoRepository);
+    let releaseWrite: (() => void) | undefined;
+    let writePromise: Promise<void> | undefined;
+    vi.spyOn(todoRepository, 'setSubtaskChecked').mockImplementation((...args) => {
+      writePromise = new Promise<void>((resolve) => { releaseWrite = resolve; }).then(() => persist(...args));
+      return writePromise;
+    });
+    render(<App/>);
+    await screen.findByRole('region', { name: '待办' });
+    const checkbox = await screen.findByRole('checkbox', { name: '子任务：带上钥匙' });
+    fireEvent.click(checkbox);
+    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.subtasks[0].checked).toBe(false);
+
+    await act(async () => {
+      releaseWrite?.();
+      await writePromise;
+    });
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.subtasks[0].checked).toBe(true));
+    expect((screen.getByRole('checkbox', { name: '子任务：带上钥匙' }) as HTMLInputElement).checked).toBe(true);
+  });
+
   it('adds, renames, and deletes draft subtasks in the task editor', async () => {
     await todoRepository.createQuickTask('准备周末出门');
     render(<App/>);

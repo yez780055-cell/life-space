@@ -53,7 +53,21 @@ function DemoNotice({ children }: { children: ReactNode }) {
   return <p className="todo-demo-note">{children}</p>;
 }
 
-function TaskLine({ task, onToggle, onToggleSubtask, onOpen, tagNames }: { task: TaskInstance; onToggle: () => void; onToggleSubtask: (subtaskId: string, checked: boolean) => void; onOpen: (trigger: HTMLElement) => void; tagNames: Map<string, string> }) {
+function TaskSubtaskControl({ subtask, onToggle }: { subtask: TaskInstance['subtasks'][number]; onToggle: (checked: boolean) => Promise<void> }) {
+  const [pendingChecked, setPendingChecked] = useState<boolean | null>(null);
+  useEffect(() => setPendingChecked(null), [subtask.checked]);
+  const checked = pendingChecked ?? subtask.checked;
+  return <label className={checked ? 'is-checked' : ''}>
+    <input type="checkbox" checked={checked} aria-label={'子任务：' + (subtask.title || '未命名')} onChange={(event) => {
+      const next = event.target.checked;
+      setPendingChecked(next);
+      void onToggle(next).catch(() => setPendingChecked(null));
+    }}/>
+    <span>{subtask.title}</span>
+  </label>;
+}
+
+function TaskLine({ task, onToggle, onToggleSubtask, onOpen, tagNames }: { task: TaskInstance; onToggle: () => void; onToggleSubtask: (subtaskId: string, checked: boolean) => Promise<void>; onOpen: (trigger: HTMLElement) => void; tagNames: Map<string, string> }) {
   const done = isDone(task);
   return <div className={"todo-task-row " + (done ? "is-done" : "")} data-task-key={task.instanceKey}>
     <button className="todo-check" aria-label={(done ? "恢复任务：" : "完成任务：") + task.title} aria-pressed={done} onClick={onToggle}><Icon name="check"/></button>
@@ -67,10 +81,7 @@ function TaskLine({ task, onToggle, onToggleSubtask, onOpen, tagNames }: { task:
         </span>
       </button>
       {!!task.subtasks.length && <div className="todo-task-subtasks" aria-label={task.title + "的子任务"}>
-        {task.subtasks.map((subtask) => <label key={subtask.id} className={subtask.checked ? "is-checked" : ""}>
-          <input type="checkbox" checked={subtask.checked} aria-label={"子任务：" + (subtask.title || "未命名")} onChange={(event) => onToggleSubtask(subtask.id, event.target.checked)}/>
-          <span>{subtask.title}</span>
-        </label>)}
+        {task.subtasks.map((subtask) => <TaskSubtaskControl key={subtask.id} subtask={subtask} onToggle={(checked) => onToggleSubtask(subtask.id, checked)}/>)}
       </div>}
     </div>
     <button type="button" className="todo-task-edit" onClick={(event) => onOpen(event.currentTarget)} aria-label={"编辑任务：" + task.title}><Icon name="chevron"/></button>
@@ -83,7 +94,7 @@ function PersonalHome({
 }: {
   view: TimeView; onView: (view: TimeView) => void; onShiftPeriod: (delta: number) => void; onResetPeriod: () => void; periodAnchor: DateKey;
   inboxOpen: boolean; onInbox: () => void; hideCompleted: boolean; onHideCompleted: () => void;
-  tasks: TaskInstance[]; inboxTasks: TaskInstance[]; overdueTasks: TaskInstance[]; onToggleTask: (task: TaskInstance) => void; onToggleSubtask: (task: TaskInstance, subtaskId: string, checked: boolean) => void; onEditTask: (task: TaskInstance, trigger: HTMLElement) => void;
+  tasks: TaskInstance[]; inboxTasks: TaskInstance[]; overdueTasks: TaskInstance[]; onToggleTask: (task: TaskInstance) => void; onToggleSubtask: (task: TaskInstance, subtaskId: string, checked: boolean) => Promise<void>; onEditTask: (task: TaskInstance, trigger: HTMLElement) => void;
   focusDate: DateKey | null; focusOpen: boolean; onFocusDate: (date: DateKey) => void; onCloseFocus: () => void; onOpenAdd: (date: DateKey | null) => void;
   tags: PersonalTag[]; toggleRef?: (button: HTMLButtonElement | null) => void;
 }) {
@@ -688,7 +699,10 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     try {
       await todoRepository.setSubtaskChecked(task.taskId, task.periodDate, subtaskId, checked);
       await refreshData();
-    } catch (error) { onNotice(error instanceof Error ? error.message : "子任务状态更新失败，请重试。"); }
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : "子任务状态更新失败，请重试。");
+      throw error;
+    }
   };
 
   const openTaskEditor = (task: TaskInstance, trigger: HTMLElement) => {
@@ -767,7 +781,7 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     view, onView: changeView, onShiftPeriod: shiftPeriod, onResetPeriod: resetPeriod, periodAnchor, inboxOpen,
     onInbox: () => setInboxOpen((open) => !open), hideCompleted, onHideCompleted: () => setHideCompleted((hidden) => !hidden),
     tasks: rangeInstances, inboxTasks: inboxInstances, overdueTasks: view === "today" && periodAnchor === currentDay ? overdueInstances : [],
-    onToggleTask: (task: TaskInstance) => void handleTaskToggle(task), onToggleSubtask: (task: TaskInstance, id: string, checked: boolean) => void handleSubtaskToggle(task, id, checked), onEditTask: openTaskEditor,
+    onToggleTask: (task: TaskInstance) => void handleTaskToggle(task), onToggleSubtask: (task: TaskInstance, id: string, checked: boolean) => handleSubtaskToggle(task, id, checked), onEditTask: openTaskEditor,
     focusDate, focusOpen: isFocusScreen || (isPersonalEditor && editorOriginScreen.current === "personal-month-focus"), onFocusDate: chooseFocusDate, onCloseFocus: onBack, onOpenAdd: openPersonalAdd, tags: personalTags
   };
 
