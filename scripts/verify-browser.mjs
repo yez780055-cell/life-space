@@ -189,9 +189,12 @@ try {
   const timeViewHistoryLength = await page.evaluate(() => window.history.length);
   const inbox = page.getByRole('button', { name: /收集箱/ });
   if (await inbox.getAttribute('aria-expanded') !== 'true') await inbox.tap();
-  await page.getByText('移动浏览器任务').waitFor();
-  if (await inbox.getAttribute('aria-expanded') === 'true') await inbox.tap();
+  const inboxTask = page.getByText('移动浏览器任务');
+  await inboxTask.waitFor();
+  await inbox.tap();
+  await inboxTask.waitFor({ state: 'hidden' });
   if (await page.evaluate(() => window.history.length) !== timeViewHistoryLength) throw new Error('Time view or inbox interaction changed browser history');
+  await inbox.tap();
   await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
   await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
   await page.goBack();
