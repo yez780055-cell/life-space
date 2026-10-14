@@ -54,6 +54,15 @@ try {
   await desktopPage.getByRole('heading', { name: '我们的小事' }).waitFor();
   await desktopPage.getByRole('button', { name: '返回个人待办' }).click();
   await waitForSpace(desktopPage, 'personal');
+  const desktopCycleLength = await desktopPage.evaluate(() => window.history.length);
+  for (let index = 0; index < 3; index += 1) {
+    await desktopPage.getByRole('button', { name: '进入情侣专区' }).click();
+    await waitForSpace(desktopPage, 'couple');
+    await desktopPage.getByRole('button', { name: '返回个人待办' }).click();
+    await waitForSpace(desktopPage, 'personal');
+  }
+  const desktopCycleLengthAfter = await desktopPage.evaluate(() => window.history.length);
+  if (desktopCycleLengthAfter !== desktopCycleLength) throw new Error(`Repeated space toggles added browser history: ${desktopCycleLength} -> ${desktopCycleLengthAfter}`);
   await desktopPage.getByRole('button', { name: '快速新增待办' }).click();
   const quickDialog = desktopPage.getByRole('dialog', { name: '快速记录' });
   await quickDialog.waitFor();
@@ -88,14 +97,21 @@ try {
   await page.getByRole('tab', { name: '本月' }).tap();
   await page.getByRole('grid').waitFor();
   await page.getByRole('tab', { name: '本周' }).tap();
+  const timeViewHistoryLength = await page.evaluate(() => window.history.length);
   const inbox = page.getByRole('button', { name: /收集箱/ });
   await inbox.tap();
   await page.getByText('想到一件要买的小东西').waitFor();
   await inbox.tap();
+  if (await page.evaluate(() => window.history.length) !== timeViewHistoryLength) throw new Error('Time view or inbox interaction changed browser history');
+  await page.getByRole('button', { name: '编辑任务：整理本周工作票据' }).tap();
+  await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
+  await page.goBack();
+  await page.getByRole('region', { name: '待办' }).waitFor();
   await page.getByRole('button', { name: '快速新增待办' }).tap();
   const mobileQuick = page.getByRole('dialog', { name: '快速记录' });
   await mobileQuick.waitFor();
-  await mobileQuick.getByRole('button', { name: '关闭' }).tap();
+  await page.goBack();
+  await mobileQuick.waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(page, 'couple');
   await page.screenshot({ path: 'docs/screenshots/todo-couple-mobile.png', fullPage: true });
@@ -119,6 +135,14 @@ try {
   await waitForSpace(page, 'couple');
   await page.goBack();
   await waitForSpace(page, 'personal');
+  const globalTabsHistoryLength = await page.evaluate(() => window.history.length);
+  await page.locator('.bottom-nav').getByRole('button', { name: '小月历' }).tap();
+  await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
+  await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
+  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
+  await page.locator('.bottom-nav').getByRole('button', { name: '待办' }).tap();
+  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
+  if (await page.evaluate(() => window.history.length) !== globalTabsHistoryLength) throw new Error('Sibling Foundation tabs added browser history entries');
   await page.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(page, 'couple');
   await page.getByRole('button', { name: '返回个人待办' }).tap();
@@ -134,6 +158,18 @@ try {
   await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
   const restored = await page.locator('.module-holder.visible').evaluate((element) => element.scrollTop);
   if (restored !== initial) throw new Error(`Module scroll was not preserved across navigation: ${initial} -> ${restored}`);
+  await page.getByRole('button', { name: '进入情侣专区' }).tap();
+  await waitForSpace(page, 'couple');
+  await page.getByRole('button', { name: '查看已完成历史' }).tap();
+  await page.getByRole('heading', { name: '完成的时光' }).waitFor();
+  await page.getByRole('button', { name: '筛选时间范围' }).tap();
+  await page.getByRole('dialog', { name: '选择时间范围' }).waitFor();
+  await page.reload();
+  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
+  if (await page.locator('.todo-module-root').getAttribute('data-current-space') !== 'personal' || await page.getByRole('dialog').count()) {
+    throw new Error('Reload from a nested Todo surface did not recover to a valid Todo root');
+  }
+  if (await page.getByTestId('space-ripple').count()) throw new Error('Reload left a Todo ripple overlay behind');
   await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
   await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
   await waitForSavedModule(page, 'anniversary');
@@ -163,7 +199,7 @@ try {
   await mobile.setOffline(true);
   await page.reload();
   await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  console.log(JSON.stringify({ desktop: { doubleSpaceRipple: 'passed', coupleCardSlide: 'passed', editingAndHistory: 'passed', quickAddDemo: 'passed', foundationModulesAndSettings: 'passed' }, mobile390x844: { periodViews: 'passed', inbox: 'passed', quickAdd: 'passed', coupleTouchAndHistoryBack: 'passed', noHorizontalOverflow: 'passed', scroll: { initial, restored } }, pwa: registration, offlineReload: 'passed', screenshots: ['docs/screenshots/mobile.png', 'docs/screenshots/todo-couple-desktop.png', 'docs/screenshots/todo-couple-mobile.png', 'docs/screenshots/todo-couple-card-expanded.png'] }, null, 2));
+  console.log(JSON.stringify({ desktop: { doubleSpaceRipple: 'passed', repeatSpaceTogglesDoNotAccumulateHistory: 'passed', coupleCardSlide: 'passed', editingAndHistory: 'passed', quickAddDemo: 'passed', foundationModulesAndSettings: 'passed' }, mobile390x844: { periodViewsDoNotAddHistory: 'passed', inbox: 'passed', personalEditorBack: 'passed', quickAddBack: 'passed', coupleTouchAndHistoryBack: 'passed', globalTabsDoNotAddHistory: 'passed', nestedTodoReloadRecovery: 'passed', noHorizontalOverflow: 'passed', scroll: { initial, restored } }, pwa: registration, offlineReload: 'passed', screenshots: ['docs/screenshots/mobile.png', 'docs/screenshots/todo-couple-desktop.png', 'docs/screenshots/todo-couple-mobile.png', 'docs/screenshots/todo-couple-card-expanded.png'] }, null, 2));
   await mobile.close();
 } finally {
   await browser.close();

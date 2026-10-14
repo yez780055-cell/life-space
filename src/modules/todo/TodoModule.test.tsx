@@ -62,6 +62,8 @@ describe('Todo Phase 2A', () => {
   it('switches time views and expands the collection inline', async () => {
     render(<App/>);
     const page = await screen.findByRole('region', { name: '待办' });
+    const rootDepth = (history.state as { depth: number }).depth;
+    const rootLength = history.length;
     fireEvent.click(within(page).getByRole('tab', { name: '今天' }));
     expect(within(page).getByRole('tab', { name: '今天' }).getAttribute('aria-selected')).toBe('true');
     expect(within(page).getByRole('heading', { name: '今天' })).toBeTruthy();
@@ -75,6 +77,25 @@ describe('Todo Phase 2A', () => {
     expect(within(page).getByText('想到一件要买的小东西')).toBeTruthy();
     fireEvent.click(inbox);
     expect(within(page).queryByText('想到一件要买的小东西')).toBeNull();
+    fireEvent.click(within(page).getByRole('button', { name: '隐藏已完成' }));
+    expect(within(page).getByRole('button', { name: '显示已完成' })).toBeTruthy();
+    expect((history.state as { depth: number }).depth).toBe(rootDepth);
+    expect(history.length).toBe(rootLength);
+  });
+
+  it('uses browser Back to close quick add and return from the personal editor', async () => {
+    render(<App/>);
+    await screen.findByRole('region', { name: '待办' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑任务：整理本周工作票据' }));
+    await screen.findByRole('heading', { name: '编辑任务' });
+    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    expect(screen.getByRole('region', { name: '待办' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '快速新增待办' }));
+    await screen.findByRole('dialog', { name: '快速记录' });
+    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('region', { name: '待办' })).toBeTruthy();
   });
 
   it('opens each quick-add UI and clearly reports that demo input is not saved', async () => {
@@ -107,6 +128,12 @@ describe('Todo Phase 2A', () => {
     await screen.findByRole('heading', { name: '这一周' });
     fireEvent.click(screen.getByRole('button', { name: '进入情侣专区' }));
     fireEvent.animationEnd(screen.getByTestId('space-ripple'));
+    const coupleDepth = (history.state as { depth: number }).depth;
+    const coupleHistoryLength = history.length;
+    fireEvent.click(screen.getByRole('button', { name: '约会' }));
+    expect(screen.getByRole('button', { name: '约会' }).getAttribute('aria-pressed')).toBe('true');
+    expect((history.state as { depth: number }).depth).toBe(coupleDepth);
+    expect(history.length).toBe(coupleHistoryLength);
     const card = await screen.findByRole('button', { name: /找一家喜欢的日料店/ });
     fireEvent.click(card);
     expect(card.getAttribute('aria-expanded')).toBe('true');
@@ -114,7 +141,7 @@ describe('Todo Phase 2A', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑：找一家喜欢的日料店' }));
     await screen.findByRole('heading', { name: '编辑小事' });
     expect(screen.getByRole('textbox', { name: '事项标题' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    await act(async () => { history.back(); await new Promise((resolve) => window.setTimeout(resolve, 30)); });
     await screen.findByRole('region', { name: '我们的小事' });
     await waitFor(() => expect(document.querySelector('.couple-card-body')?.getAttribute('aria-expanded')).toBe('true'));
   });

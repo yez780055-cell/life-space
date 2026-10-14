@@ -312,9 +312,16 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const [ripple, setRipple] = useState<RippleState | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const spaceToggleRef = useRef<HTMLButtonElement>(null);
+  const focusSpaceAfterChange = useRef<TodoSpace | null>(null);
   const rippleBusy = useRef(false);
   const finishRippleRef = useRef<() => void>(() => undefined);
   const animationTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (focusSpaceAfterChange.current !== snapshot.todoSpace) return;
+    focusSpaceAfterChange.current = null;
+    requestAnimationFrame(() => spaceToggleRef.current?.focus({ preventScroll: true }));
+  }, [snapshot.todoSpace]);
 
   const tasks = personalTasks.map((task) => ({ ...task, done: doneItems.includes(task.id) }));
   const currentOverlay = snapshot.surfaces.at(-1);
@@ -344,14 +351,12 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     animationTimer.current = undefined;
     finishRippleRef.current = () => undefined;
     setRipple(null);
-    if (next) {
-      onSpaceChange(next);
-      requestAnimationFrame(() => spaceToggleRef.current?.focus({ preventScroll: true }));
-    }
+    if (next) onSpaceChange(next);
   }
 
   function startSpaceChange(target: TodoSpace, button: HTMLButtonElement) {
     if (rippleBusy.current) return;
+    focusSpaceAfterChange.current = target;
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     if (reduceMotion) { onSpaceChange(target); return; }
     const holder = rootRef.current?.closest('.module-holder') as HTMLElement | null;

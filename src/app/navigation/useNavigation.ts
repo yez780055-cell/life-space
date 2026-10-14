@@ -21,7 +21,8 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const epoch = useRef(0);
   const current = useRef(snapshot);
   const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen'] } | null>(null);
-  const pendingBack = useRef(false);
+  const pendingTraversal = useRef(false);
+  const todoSpaceForward = useRef(false);
   const lastExit = useRef(0);
   const bootStarted = useRef(false);
 
@@ -35,7 +36,14 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const commitTab = useCallback((module: ModuleId, pages: NavigationSnapshot['pages'], base: NavigationSnapshot) => {
     epoch.current += 1;
     const todoScreenToRestore = base.todoScreen;
-    const root = switchModule({ ...base, pages: { ...pages, [module]: 'home' }, ...(module === 'todo' ? { todoScreen: 'home' as const } : {}) }, module);
+    const todoSpaceToRestore = base.todoSpace;
+    todoSpaceForward.current = false;
+    const root = switchModule({
+      ...base,
+      pages: { ...pages, [module]: 'home' },
+      surfaces: [],
+      ...(module === 'todo' ? { todoSpace: 'personal' as const, todoScreen: 'home' as const } : {})
+    }, module);
     depth.current = 0;
     history.replaceState(entry(root, 0), '');
     if (pages[module] === 'guide') {
@@ -43,12 +51,23 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       depth.current = 1;
       history.pushState(entry(detail, 1), '');
       setCurrent(detail);
-    } else if (module === 'todo' && todoScreenToRestore !== 'home') {
-      const detail = { ...root, todoScreen: todoScreenToRestore };
-      depth.current = 1;
-      history.pushState(entry(detail, 1), '');
-      setCurrent(detail);
-    } else setCurrent(root);
+      return;
+    }
+
+    // Todo keeps its home at the app root. Rebuild the selected space and child
+    // page above that root when returning from a sibling Foundation module.
+    let restored = root;
+    if (module === 'todo' && todoSpaceToRestore === 'couple') {
+      restored = { ...restored, todoSpace: 'couple' };
+      depth.current += 1;
+      history.pushState(entry(restored, depth.current), '');
+    }
+    if (module === 'todo' && todoScreenToRestore !== 'home') {
+      restored = { ...restored, todoScreen: todoScreenToRestore };
+      depth.current += 1;
+      history.pushState(entry(restored, depth.current), '');
+    }
+    setCurrent(restored);
   }, [entry, setCurrent]);
 
   useEffect(() => {
@@ -72,11 +91,13 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     const onPop = (event: PopStateEvent) => {
       const state = event.state as HistoryEntry | null;
       if (state?.[HISTORY_KEY] !== id.current) {
+        pendingTraversal.current = false;
         if (state?.[HISTORY_KEY] && state.depth > 0) history.go(-state.depth);
         return;
       }
-      pendingBack.current = false;
+      pendingTraversal.current = false;
       if (pendingTab.current) {
+        todoSpaceForward.current = false;
         const { module, pages, todoSpace, todoScreen } = pendingTab.current;
         pendingTab.current = null;
         commitTab(module, pages, { ...state.snapshot, todoSpace, todoScreen });
@@ -84,7 +105,19 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
         // A tab switch can leave old child entries ahead of the root. Bounce
         // back to the root instead of turning the stale entry into a phantom root.
         history.go(-Math.max(1, state.depth));
-      } else { depth.current = state.depth; setCurrent(state.snapshot); }
+      } else {
+        const previous = current.current;
+        todoSpaceForward.current = previous.module === 'todo'
+          && previous.todoSpace === 'couple'
+          && previous.todoScreen === 'home'
+          && previous.surfaces.length === 0
+          && state.snapshot.module === 'todo'
+          && state.snapshot.todoSpace === 'personal'
+          && state.snapshot.todoScreen === 'home'
+          && state.snapshot.surfaces.length === 0;
+        depth.current = state.depth;
+        setCurrent(state.snapshot);
+      }
     };
     addEventListener('popstate', onPop);
     return () => { removeEventListener('popstate', onPop); removeEventListener('popstate', onBootPop); };
@@ -92,6 +125,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
 
   const push = useCallback((next: NavigationSnapshot) => {
     resetExit();
+    todoSpaceForward.current = false;
     depth.current += 1;
     history.pushState(entry(next, depth.current), '');
     setCurrent(next);
@@ -99,9 +133,16 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
 
   const back = useCallback(async () => {
     if (depth.current > 0) {
-      if (pendingBack.current) return;
-      pendingBack.current = true;
+      if (pendingTraversal.current) return;
+      pendingTraversal.current = true;
       history.back();
+      return;
+    }
+    if (current.current.module === 'todo' && current.current.todoSpace === 'couple') {
+      const personal = { ...current.current, todoSpace: 'personal' as const, todoScreen: 'home' as const, surfaces: [] };
+      todoSpaceForward.current = false;
+      history.replaceState(entry(personal, 0), '');
+      setCurrent(personal);
       return;
     }
     if (!Capacitor.isNativePlatform()) return;
@@ -110,7 +151,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     lastExit.current = now;
     setExitHint(true);
     window.setTimeout(() => setExitHint(false), EXIT_WINDOW_MS);
-  }, []);
+  }, [entry, setCurrent]);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -126,7 +167,8 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const selectModule = useCallback((module: ModuleId) => {
     if (module === current.current.module && current.current.surfaces.length === 0) return;
     resetExit();
-    if (pendingTab.current || pendingBack.current) return;
+    if (pendingTab.current || pendingTraversal.current) return;
+    todoSpaceForward.current = false;
     // Return to the app's root history entry before replacing the active tab.
     if (depth.current > 0) {
       pendingTab.current = { module, pages: current.current.pages, todoSpace: current.current.todoSpace, todoScreen: current.current.todoScreen };
@@ -141,15 +183,37 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     snapshot, historyReady, exitHint, selectModule,
     showGuide: () => push(openGuide(current.current)),
     showTodoSpace: (space: TodoSpace) => {
-      if (current.current.module !== 'todo' || current.current.todoSpace === space || current.current.todoScreen !== 'home') return;
-      push({ ...current.current, todoSpace: space, todoScreen: 'home', surfaces: [] });
+      if (current.current.module !== 'todo' || current.current.todoSpace === space || current.current.todoScreen !== 'home' || current.current.surfaces.length > 0 || pendingTraversal.current) return;
+      resetExit();
+      if (space === 'couple' && todoSpaceForward.current) {
+        todoSpaceForward.current = false;
+        if (pendingTraversal.current) return;
+        pendingTraversal.current = true;
+        history.forward();
+        return;
+      }
+      if (space === 'personal') {
+        if (pendingTraversal.current) return;
+        if (depth.current > 0) {
+          pendingTraversal.current = true;
+          history.back();
+        } else {
+          // Defensive normalization for a legacy or malformed root snapshot.
+          const personal = { ...current.current, todoSpace: 'personal' as const, todoScreen: 'home' as const, surfaces: [] };
+          todoSpaceForward.current = false;
+          history.replaceState(entry(personal, depth.current), '');
+          setCurrent(personal);
+        }
+        return;
+      }
+      push({ ...current.current, todoSpace: 'couple', todoScreen: 'home', surfaces: [] });
     },
     showTodoScreen: (screen: TodoScreen) => {
-      if (current.current.module !== 'todo' || current.current.todoScreen === screen) return;
+      if (current.current.module !== 'todo' || current.current.todoScreen === screen || current.current.surfaces.length > 0 || pendingTraversal.current) return;
       push({ ...current.current, todoScreen: screen, surfaces: [] });
     },
     showSurface: (surface: Surface) => {
-      if (current.current.surfaces.includes(surface)) return;
+      if (current.current.surfaces.includes(surface) || pendingTraversal.current) return;
       push(openSurface(current.current, surface));
     },
     back
