@@ -2,7 +2,7 @@ name: Todo Phase 2A Web preview
 
 on:
   push:
-    branches: [feat/todo-phase-2a]
+    branches: [feat/todo-phase-2b]
 
 permissions:
   contents: read
