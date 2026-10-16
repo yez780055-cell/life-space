@@ -1,4 +1,4 @@
-/* global process, console, document, indexedDB, navigator, URL, fetch, Touch, TouchEvent */
+/* global process, console, document, window, indexedDB, navigator, URL, fetch, Touch, TouchEvent, PointerEvent, MouseEvent, getComputedStyle */
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
@@ -12,7 +12,8 @@ const shot = (page, name) => page.screenshot({ path: join(screenshotDir, name), 
 
 async function waitForSpace(page, space) {
   await page.waitForFunction((expected) => document.querySelector('.todo-module-root')?.getAttribute('data-current-space') === expected, space, { timeout: 3000 });
-  if (await page.getByTestId('space-ripple').count()) throw new Error('A space ripple remained after transition');
+  await page.locator('.todo-module-root .todo-module-page:not(.is-space-changing)').waitFor();
+  if (await page.locator('.todo-module-root .todo-module-page').count() !== 1) throw new Error('A duplicate space preview remained after transition');
 }
 
 async function waitForTodoData(page) {
@@ -77,7 +78,7 @@ async function waitForCoupleItem(page, title, expected = {}) {
 
 async function addCoupleItem(page, title) {
   await page.getByRole('button', { name: '新增情侣事项' }).click();
-  const dialog = page.getByRole('dialog', { name: '记一件我们的小事' });
+  const dialog = page.getByRole('dialog', { name: '快速添加小事' });
   await dialog.waitFor();
   await dialog.getByRole('textbox', { name: '事项标题' }).fill(title);
   await dialog.getByRole('button', { name: '添加' }).click();
@@ -100,6 +101,28 @@ async function addCoupleItem(page, title) {
   await dialog.waitFor({ state: 'detached' });
 }
 
+async function addDetailedCoupleItem(page, { title, date, time, tag, note }, touch = false) {
+  const interact = (locator) => touch ? locator.tap() : locator.click();
+  await interact(page.getByRole('button', { name: '新增情侣事项' }));
+  const dialog = page.getByRole('dialog', { name: '快速添加小事' });
+  await dialog.waitFor();
+  await dialog.getByRole('textbox', { name: '事项标题' }).fill(title);
+  await interact(dialog.getByRole('button', { name: '详细' }));
+  const details = page.getByRole('dialog', { name: '详细添加小事' });
+  if (await details.getByRole('textbox', { name: '事项标题' }).inputValue() !== title) throw new Error('Switching couple add modes discarded the title');
+  if (date) await details.getByLabel('安排日期').fill(date);
+  if (time) await details.locator('input[type="time"]').fill(time);
+  if (tag) {
+    await details.getByRole('textbox', { name: '新建情侣标签' }).fill(tag);
+    await interact(details.getByRole('button', { name: '添加标签' }));
+    await details.getByRole('button', { name: tag, exact: true }).waitFor();
+  }
+  if (note) await details.getByRole('textbox', { name: '备注' }).fill(note);
+  await interact(details.getByRole('button', { name: '添加', exact: true }));
+  await details.waitFor({ state: 'detached' });
+  await waitForCoupleItem(page, title, { scheduledDate: date || null });
+}
+
 function coupleCard(page, title) {
   return page.locator('.couple-card-body').filter({ hasText: title });
 }
@@ -108,6 +131,17 @@ async function expandCoupleCard(page, title) {
   const card = coupleCard(page, title);
   if (await card.getAttribute('aria-expanded') !== 'true') await card.click();
   return card;
+}
+
+async function dragCoupleCard(page, title, targetSelector, steps = 8) {
+  const card = coupleCard(page, title);
+  const source = await card.boundingBox();
+  const target = await page.locator(targetSelector).boundingBox();
+  if (!source || !target) throw new Error(`Could not measure a couple card drop from ${title}`);
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps });
+  await page.mouse.up();
 }
 
 try {
@@ -191,10 +225,14 @@ try {
   if (await page.locator('.todo-minimal-header h1').textContent() !== selectedDateHeading) throw new Error('Vertical scrolling changed the selected date');
   await shot(page, 'todo-desktop-date-swipe.png');
 
+  const personalSpaceToggleBounds = await page.getByRole('button', { name: '进入情侣专区' }).boundingBox();
   await page.getByRole('button', { name: '进入情侣专区' }).click();
   await waitForSpace(page, 'couple');
-  await page.getByText('仅保存在此设备 · 跨设备同步尚未配置').waitFor();
+  const coupleSpaceToggleBounds = await page.getByRole('button', { name: '返回个人待办' }).boundingBox();
+  if (!personalSpaceToggleBounds || !coupleSpaceToggleBounds || Math.abs(personalSpaceToggleBounds.x - coupleSpaceToggleBounds.x) > 1 || Math.abs(personalSpaceToggleBounds.y - coupleSpaceToggleBounds.y) > 1 || personalSpaceToggleBounds.width !== coupleSpaceToggleBounds.width || personalSpaceToggleBounds.height !== coupleSpaceToggleBounds.height) throw new Error('Personal and couple space toggles do not share the same upper-right position and size');
+  await page.getByText('仅保存在此设备').waitFor();
   if (await page.locator('.couple-card-body').count() !== 0) throw new Error('A fresh couple board should not contain demo items');
+  const coupleDate = await page.evaluate(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; });
   await addCoupleItem(page, '一起散步');
   await addCoupleItem(page, '在家看电影');
 
@@ -202,7 +240,6 @@ try {
   await page.getByRole('button', { name: '编辑：一起散步', exact: true }).click();
   const coupleEditor = page.locator('.couple-editor-page');
   await coupleEditor.getByRole('textbox', { name: '事项标题' }).fill('周末一起散步');
-  const coupleDate = await page.evaluate(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; });
   await coupleEditor.getByLabel('安排日期').fill(coupleDate);
   await coupleEditor.getByLabel('安排时间').fill('18:30');
   await coupleEditor.getByRole('textbox', { name: '备注' }).fill('带上相机');
@@ -212,25 +249,58 @@ try {
   await coupleEditor.getByRole('button', { name: '保存' }).click();
   await coupleCard(page, '周末一起散步').waitFor();
 
-  const plannedColumn = page.getByRole('region', { name: '已安排' });
-  const plannedBounds = await plannedColumn.boundingBox();
-  if (!plannedBounds) throw new Error('The planned couple column is not visible');
-  const unplannedHandle = page.getByRole('button', { name: '拖动安排或点击编辑：在家看电影' });
-  await unplannedHandle.hover();
-  await page.mouse.down();
-  await page.mouse.move(plannedBounds.x + plannedBounds.width / 2, plannedBounds.y + plannedBounds.height / 2, { steps: 8 });
-  await page.mouse.up();
-  await waitForCoupleItem(page, '在家看电影', { scheduledDate: coupleDate });
+  await addDetailedCoupleItem(page, { title: '周末野餐', date: coupleDate, time: '12:00', tag: '户外', note: '带上野餐垫' });
+  const outdoorTag = page.getByRole('button', { name: '户外', exact: true });
+  const tagFontSize = await outdoorTag.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  if (tagFontSize < 11) throw new Error(`Couple tag text is too small (${tagFontSize}px)`);
+  await outdoorTag.click();
+  if (await page.locator('.couple-card-body').count() !== 1) throw new Error('Selecting a couple tag did not filter cards');
+  await page.getByRole('button', { name: '周末', exact: true }).click();
+  if (await page.locator('.couple-card-body').count() !== 2) throw new Error('Multiple couple tags should use OR filtering');
+  const visibleCoupleCount = await page.locator('.couple-card-body').count();
+  const filteredColumnCount = await page.locator('.couple-column-title small').evaluateAll((nodes) => nodes.reduce((sum, node) => sum + Number(node.textContent), 0));
+  if (visibleCoupleCount !== filteredColumnCount) throw new Error('Couple column counts do not match filtered cards');
+  await outdoorTag.click();
+  await page.getByRole('button', { name: '周末', exact: true }).click();
+  if (await page.locator('.couple-card-body').count() !== 3) throw new Error('Clearing tags should show every open couple item');
 
-  const unplannedColumn = page.getByRole('region', { name: '未安排' });
-  const unplannedBounds = await unplannedColumn.boundingBox();
-  if (!unplannedBounds) throw new Error('The unplanned couple column is not visible');
-  const plannedHandle = page.getByRole('button', { name: '拖动安排或点击编辑：在家看电影' });
-  await plannedHandle.hover();
+  const movieCard = coupleCard(page, '在家看电影');
+  await movieCard.focus();
+  await movieCard.press('Enter');
+  await page.getByRole('button', { name: '编辑：在家看电影' }).waitFor();
+  if (await movieCard.getAttribute('aria-expanded') !== 'true') throw new Error('Tapping a couple card did not expand it');
+  await page.keyboard.press('Tab');
+  if (await page.evaluate(() => document.activeElement?.getAttribute('aria-label')) !== '完成：在家看电影') throw new Error('Keyboard focus did not reach the complete action');
+  await page.keyboard.press('Tab');
+  if (await page.evaluate(() => document.activeElement?.getAttribute('aria-label')) !== '编辑：在家看电影') throw new Error('Keyboard focus did not reach the edit action');
+  await page.keyboard.press('Enter');
+  await page.locator('.couple-editor-page').waitFor();
+  await page.getByRole('button', { name: '返回' }).click();
+  await movieCard.waitFor();
+  const movieBounds = await movieCard.boundingBox();
+  if (!movieBounds) throw new Error('The unplanned couple card is not visible');
+  const beforeSmallMove = (await readCoupleItems(page)).find((item) => item.title === '在家看电影');
+  await page.mouse.move(movieBounds.x + movieBounds.width / 2, movieBounds.y + movieBounds.height / 2);
   await page.mouse.down();
-  await page.mouse.move(unplannedBounds.x + unplannedBounds.width / 2, unplannedBounds.y + unplannedBounds.height / 2, { steps: 8 });
+  await page.mouse.move(movieBounds.x + movieBounds.width / 2 + 3, movieBounds.y + movieBounds.height / 2 + 3);
   await page.mouse.up();
+  if (await movieCard.getAttribute('aria-expanded') !== 'true') throw new Error('A short pointer movement should act as a tap, not a drag');
+  if ((await readCoupleItems(page)).find((item) => item.title === '在家看电影')?.revision !== beforeSmallMove?.revision) throw new Error('A pointer movement below the drag threshold changed the task');
+  await movieCard.click();
+  const invalidTarget = await page.locator('.couple-header').boundingBox();
+  if (!invalidTarget) throw new Error('The couple header is not visible');
+  const beforeInvalidDrop = (await readCoupleItems(page)).find((item) => item.title === '在家看电影');
+  await page.mouse.move(movieBounds.x + movieBounds.width / 2, movieBounds.y + movieBounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(invalidTarget.x + invalidTarget.width / 2, invalidTarget.y + invalidTarget.height / 2, { steps: 8 });
+  await page.mouse.up();
+  if ((await readCoupleItems(page)).find((item) => item.title === '在家看电影')?.revision !== beforeInvalidDrop?.revision) throw new Error('Dropping outside a valid column changed the task');
+  await dragCoupleCard(page, '在家看电影', '[data-couple-drop-target="planned"]');
+  await waitForCoupleItem(page, '在家看电影', { scheduledDate: coupleDate });
+  if ((await readCoupleItems(page)).find((item) => item.title === '在家看电影')?.scheduledTime !== null) throw new Error('Scheduling by drop should clear the old time');
+  await dragCoupleCard(page, '在家看电影', '[data-couple-drop-target="unplanned"]');
   await waitForCoupleItem(page, '在家看电影', { scheduledDate: null });
+  if ((await readCoupleItems(page)).find((item) => item.title === '在家看电影')?.scheduledTime !== null) throw new Error('Unplanning did not clear the scheduled time');
 
   await page.getByRole('button', { name: '在家看电影', exact: true }).click();
   await page.getByRole('button', { name: '编辑：在家看电影', exact: true }).click();
@@ -270,6 +340,14 @@ try {
   await page.getByText('这个时间范围内没有已完成的事项。').waitFor();
 
   await page.getByRole('button', { name: '返回' }).click();
+  await page.reload();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('button', { name: '进入情侣专区' }).click();
+  await waitForSpace(page, 'couple');
+  for (const title of ['周末一起散步', '在家看电影', '周末野餐']) await coupleCard(page, title).waitFor();
+  const reloadItems = await readCoupleItems(page);
+  const reloadedDetail = reloadItems.find((item) => item.title === '周末野餐');
+  if (!reloadedDetail || reloadedDetail.scheduledTime !== '12:00' || reloadedDetail.note !== '带上野餐垫' || reloadedDetail.tags.length !== 1) throw new Error('Detailed couple data did not persist after reload');
   await page.getByRole('button', { name: '返回个人待办' }).waitFor();
   await coupleCard(page, '在家看电影').click();
   await page.getByRole('button', { name: '编辑：在家看电影', exact: true }).click();
@@ -362,22 +440,85 @@ try {
   await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
   await mobilePage.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(mobilePage, 'couple');
-  await addCoupleItem(mobilePage, '手机上的情侣事项');
-  await mobilePage.getByRole('button', { name: '手机上的情侣事项', exact: true }).waitFor();
+  const mobileCoupleDate = await mobilePage.evaluate(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; });
+  await addDetailedCoupleItem(mobilePage, { title: '手机上的情侣事项', date: mobileCoupleDate, time: '10:30', tag: '手机计划', note: '手机端详细添加' }, true);
+  await coupleCard(mobilePage, '手机上的情侣事项').waitFor();
+  const mobileTag = mobilePage.getByRole('button', { name: '手机计划', exact: true });
+  const mobileTagSize = await mobileTag.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  if (mobileTagSize < 11) throw new Error(`Mobile couple tag text is too small (${mobileTagSize}px)`);
+  await mobileTag.tap();
+  if (await mobilePage.locator('.couple-card-body').count() !== 1) throw new Error('Mobile couple tag selection did not filter the card');
+  await mobileTag.tap();
   for (const width of [320, 360, 390, 430]) {
     await mobilePage.setViewportSize({ width, height: 844 });
     const scrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
     if (scrollWidth > width) throw new Error(`Couple board has horizontal overflow at ${width}px (${scrollWidth}px)`);
+    const cardWidth = await coupleCard(mobilePage, '手机上的情侣事项').evaluate((element) => element.getBoundingClientRect().width);
+    if (cardWidth < 120) throw new Error(`Couple card is too narrow at ${width}px (${cardWidth}px)`);
   }
+  await mobilePage.setViewportSize({ width: 320, height: 844 });
+  const textScaleStyle = await mobilePage.addStyleTag({ content: '.couple-card-body>strong,.couple-card-tags span,.couple-card-time,.couple-card-note,.couple-tags button,.couple-filter-label,.couple-empty{font-size:calc(1em * 1.25)!important}' });
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 320) throw new Error('Couple board overflows at 320px with increased text sizing');
+  await textScaleStyle.evaluate((element) => element.remove());
+  await mobilePage.setViewportSize({ width: 390, height: 844 });
+  await mobilePage.getByRole('button', { name: '新增情侣事项' }).tap();
+  const quickCoupleDialog = mobilePage.getByRole('dialog', { name: '快速添加小事' });
+  await quickCoupleDialog.getByRole('button', { name: '详细' }).tap();
+  const smallDetailDialog = mobilePage.getByRole('dialog', { name: '详细添加小事' });
+  await smallDetailDialog.getByRole('textbox', { name: '事项标题' }).fill('临时长表单');
+  await mobilePage.setViewportSize({ width: 390, height: 520 });
+  const sheetMetrics = await smallDetailDialog.evaluate((element) => ({ overflowY: getComputedStyle(element).overflowY, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, paddingBottom: Number.parseFloat(getComputedStyle(element).paddingBottom) }));
+  if (sheetMetrics.overflowY !== 'auto' || sheetMetrics.scrollHeight <= sheetMetrics.clientHeight) throw new Error(`Couple detail sheet did not scroll in a short keyboard-sized viewport: ${JSON.stringify(sheetMetrics)}`);
+  if (sheetMetrics.paddingBottom < 16) throw new Error('Couple detail sheet has no bottom safe-area padding');
+  await smallDetailDialog.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await smallDetailDialog.getByRole('button', { name: '添加', exact: true }).scrollIntoViewIfNeeded();
+  await smallDetailDialog.getByRole('button', { name: '关闭' }).last().tap();
+  await smallDetailDialog.waitFor({ state: 'detached' });
   await mobilePage.setViewportSize({ width: 390, height: 844 });
   await shot(mobilePage, 'todo-mobile-couple-board.png');
-  await mobilePage.getByRole('button', { name: '手机上的情侣事项', exact: true }).tap();
+  const mobileCard = coupleCard(mobilePage, '手机上的情侣事项');
+  await mobileCard.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 31, pointerType: 'touch', button: 0, clientX: box.x + 16, clientY: box.y + 18 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 31, pointerType: 'touch', clientX: box.x + 18, clientY: box.y + 46 }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 31, pointerType: 'touch', clientX: box.x + 18, clientY: box.y + 46 }));
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  if (await mobileCard.getAttribute('aria-expanded') !== 'false') throw new Error('A vertical touch scroll expanded or dragged the couple card');
+  await mobileCard.dispatchEvent('pointerdown', { bubbles: true, pointerId: 32, pointerType: 'touch', button: 0, clientX: 20, clientY: 20 });
+  await mobilePage.waitForTimeout(340);
+  const unplannedMobileBounds = await mobilePage.getByRole('region', { name: '未安排' }).boundingBox();
+  if (!unplannedMobileBounds) throw new Error('The unplanned couple column is not visible on mobile');
+  await mobilePage.evaluate((bounds) => {
+    const x = bounds.x + bounds.width / 2;
+    const y = bounds.y + bounds.height / 2;
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 32, pointerType: 'touch', clientX: x, clientY: y }));
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 32, pointerType: 'touch', clientX: x, clientY: y }));
+  }, unplannedMobileBounds);
+  await waitForCoupleItem(mobilePage, '手机上的情侣事项', { scheduledDate: null });
+  if ((await readCoupleItems(mobilePage)).find((item) => item.title === '手机上的情侣事项')?.scheduledTime !== null) throw new Error('Mobile long-press unplanning did not clear time');
+  await mobileCard.tap();
+  await mobilePage.getByRole('button', { name: '完成：手机上的情侣事项' }).waitFor();
   await mobilePage.getByRole('button', { name: '完成：手机上的情侣事项' }).tap();
   await mobilePage.getByRole('button', { name: '撤销完成：手机上的情侣事项' }).tap();
-  await mobilePage.getByRole('button', { name: '手机上的情侣事项', exact: true }).waitFor();
+  await coupleCard(mobilePage, '手机上的情侣事项').waitFor();
+  await mobileTag.tap();
+  await mobilePage.emulateMedia({ reducedMotion: 'reduce' });
+  const mobileSpaceView = mobilePage.locator('.todo-module-root .todo-module-page');
+  if (await mobileSpaceView.evaluate((element) => getComputedStyle(element).transitionDuration) !== '0s') throw new Error('Reduced-motion preference did not remove the space transition');
+  await mobilePage.getByRole('button', { name: '返回个人待办' }).tap();
+  await waitForSpace(mobilePage, 'personal');
+  await mobilePage.getByRole('button', { name: '进入情侣专区' }).tap();
+  await waitForSpace(mobilePage, 'couple');
+  if (await mobileTag.getAttribute('aria-pressed') !== 'true') throw new Error('Repeated space switches discarded the selected couple filter');
+  await mobilePage.getByRole('button', { name: '返回个人待办' }).tap();
+  await waitForSpace(mobilePage, 'personal');
+  await mobilePage.getByRole('button', { name: '进入情侣专区' }).tap();
+  await waitForSpace(mobilePage, 'couple');
+  await coupleCard(mobilePage, '手机上的情侣事项').waitFor();
   await mobile.close();
 
-  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleDragScheduling: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleQuickAddAndCompletion: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
+  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
 } finally {
   await browser.close();
 }

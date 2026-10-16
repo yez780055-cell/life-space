@@ -10,6 +10,16 @@ function rect(left: number, top: number, width: number, height: number) {
   return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
 }
 
+class TestPointerEvent extends MouseEvent {
+  readonly pointerId: number;
+  readonly pointerType: string;
+  constructor(type: string, init: PointerEventInit = {}) {
+    super(type, init);
+    this.pointerId = init.pointerId ?? 0;
+    this.pointerType = init.pointerType ?? '';
+  }
+}
+
 function mockViewportRects() {
   return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     if (this.classList?.contains('module-holder') && this.classList.contains('visible')) return rect(0, 70, 390, 702);
@@ -29,8 +39,6 @@ async function removeDatabase() {
 
 async function enterCouple() {
   fireEvent.click(screen.getByRole('button', { name: '进入情侣专区' }));
-  const ripple = await screen.findByTestId('space-ripple');
-  fireEvent.animationEnd(ripple);
   await screen.findByRole('region', { name: '我们的小事' });
 }
 
@@ -60,6 +68,7 @@ function expandCoupleCard(title: string) {
 beforeEach(async () => {
   await removeDatabase();
   history.replaceState(null, '');
+  vi.stubGlobal('PointerEvent', TestPointerEvent);
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, media: '', onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() })));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -241,17 +250,17 @@ describe('minimal personal Todo', () => {
     await screen.findByRole('button', { name: '完成任务：只属于个人的任务' });
     await waitForTodoData();
     await enterCouple();
-    expect(screen.getByText('仅保存在此设备 · 跨设备同步尚未配置')).toBeTruthy();
+    expect(screen.getByText('仅保存在此设备')).toBeTruthy();
     expect(screen.getByText('还没有安排好的事项。')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '新增情侣事项' }));
-    let dialog = await screen.findByRole('dialog', { name: '记一件我们的小事' });
+    let dialog = await screen.findByRole('dialog', { name: '快速添加小事' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '事项标题' }), { target: { value: '一起散步' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '添加' }));
     await waitFor(async () => expect((await coupleRepository.listItems()).map((item) => item.title)).toContain('一起散步'));
     await waitFor(() => expect((within(dialog).getByRole('textbox', { name: '事项标题' }) as HTMLInputElement).value).toBe(''));
     fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '记一件我们的小事' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '快速添加小事' })).toBeNull());
 
     fireEvent.click(coupleCard('一起散步'));
     fireEvent.click(screen.getByRole('button', { name: '编辑：一起散步' }));
@@ -268,39 +277,68 @@ describe('minimal personal Todo', () => {
     await waitFor(async () => expect(await coupleRepository.listItems()).toEqual([expect.objectContaining({ title: '周末一起散步', scheduledDate: todayKey(), scheduledTime: '18:30', note: '带上相机', tags: [expect.any(String)] })]));
 
     fireEvent.click(screen.getByRole('button', { name: '新增情侣事项' }));
-    dialog = await screen.findByRole('dialog', { name: '记一件我们的小事' });
+    dialog = await screen.findByRole('dialog', { name: '快速添加小事' });
     fireEvent.change(within(dialog).getByRole('textbox', { name: '事项标题' }), { target: { value: '在家看电影' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '详细' }));
+    expect((within(dialog).getByRole('textbox', { name: '事项标题' }) as HTMLInputElement).value).toBe('在家看电影');
+    fireEvent.change(within(dialog).getByLabelText('安排日期'), { target: { value: todayKey() } });
+    fireEvent.change(within(dialog).getByLabelText('时间（可选）'), { target: { value: '20:00' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '备注' }), { target: { value: '选一部喜欢的电影' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '新建情侣标签' }), { target: { value: '居家' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '添加标签' }));
+    expect(await within(dialog).findByRole('button', { name: '居家' })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: '添加' }));
-    await waitFor(async () => expect((await coupleRepository.listItems()).map((item) => item.title)).toContain('在家看电影'));
-    await waitFor(() => expect((within(dialog).getByRole('textbox', { name: '事项标题' }) as HTMLInputElement).value).toBe(''));
-    fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '记一件我们的小事' })).toBeNull());
-    fireEvent.click(screen.getByRole('button', { name: '在家看电影' }));
-    fireEvent.click(screen.getByRole('button', { name: '编辑：在家看电影' }));
-    editor = coupleEditor();
-    fireEvent.change(within(editor).getByRole('textbox', { name: '新建情侣标签' }), { target: { value: '居家' } });
-    fireEvent.click(within(editor).getByRole('button', { name: '添加标签' }));
-    expect(await within(editor).findByRole('button', { name: '居家' })).toBeTruthy();
-    fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(coupleCard('在家看电影')).toBeTruthy());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '详细添加小事' })).toBeNull());
+    await waitFor(async () => expect(await coupleRepository.listItems()).toEqual(expect.arrayContaining([expect.objectContaining({ title: '在家看电影', scheduledDate: todayKey(), scheduledTime: '20:00', note: '选一部喜欢的电影', tags: [expect.any(String)] })])));
+    expect(coupleCard('在家看电影')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '周末' }));
     await waitFor(() => expect(document.querySelectorAll('.couple-card-body')).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: '居家' }));
     await waitFor(() => expect(document.querySelectorAll('.couple-card-body')).toHaveLength(2));
 
-    const secondHandle = screen.getByRole('button', { name: '拖动安排或点击编辑：在家看电影' });
+    let secondCard = coupleCard('在家看电影');
     const plannedColumn = screen.getByRole('region', { name: '已安排' });
-    fireEvent.pointerDown(secondHandle, { pointerId: 7, pointerType: 'mouse', button: 0 });
-    fireEvent.pointerMove(plannedColumn, { pointerId: 7, clientX: 10, clientY: 10 });
-    fireEvent.pointerUp(plannedColumn, { pointerId: 7, clientX: 10, clientY: 10 });
-    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
-    const plannedHandle = screen.getByRole('button', { name: '拖动安排或点击编辑：在家看电影' });
     const unplannedColumn = screen.getByRole('region', { name: '未安排' });
-    fireEvent.pointerDown(plannedHandle, { pointerId: 8, pointerType: 'mouse', button: 0 });
-    fireEvent.pointerMove(unplannedColumn, { pointerId: 8, clientX: 10, clientY: 10 });
-    fireEvent.pointerUp(unplannedColumn, { pointerId: 8, clientX: 10, clientY: 10 });
+    fireEvent.click(secondCard);
+    expect(secondCard.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(secondCard);
+    expect(secondCard.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.pointerDown(secondCard, { pointerId: 7, pointerType: 'mouse', button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(unplannedColumn, { pointerId: 7, clientX: 3, clientY: 3 });
+    fireEvent.pointerUp(unplannedColumn, { pointerId: 7, clientX: 3, clientY: 3 });
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
+    fireEvent.pointerDown(secondCard, { pointerId: 8, pointerType: 'mouse', button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(unplannedColumn, { pointerId: 8, clientX: 12, clientY: 12 });
+    fireEvent.pointerUp(unplannedColumn, { pointerId: 8, clientX: 12, clientY: 12 });
     await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBeNull());
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledTime).toBeNull());
+    secondCard = coupleCard('在家看电影');
+
+    fireEvent.pointerDown(secondCard, { pointerId: 9, pointerType: 'mouse', button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(plannedColumn, { pointerId: 9, clientX: 3, clientY: 3 });
+    fireEvent.pointerUp(plannedColumn, { pointerId: 9, clientX: 3, clientY: 3 });
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBeNull());
+    fireEvent.pointerDown(secondCard, { pointerId: 10, pointerType: 'mouse', button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(plannedColumn, { pointerId: 10, clientX: 12, clientY: 12 });
+    fireEvent.pointerUp(plannedColumn, { pointerId: 10, clientX: 12, clientY: 12 });
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
+    secondCard = coupleCard('在家看电影');
+
+    fireEvent.pointerDown(secondCard, { pointerId: 11, pointerType: 'touch', button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(document.body, { pointerId: 11, pointerType: 'touch', clientX: 12, clientY: 34 });
+    fireEvent.pointerUp(document.body, { pointerId: 11, pointerType: 'touch', clientX: 12, clientY: 34 });
+    fireEvent.click(secondCard);
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
+    expect(secondCard.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.pointerDown(secondCard, { pointerId: 12, pointerType: 'touch', button: 0, clientX: 10, clientY: 10 });
+    await waitFor(() => expect(secondCard.closest('.couple-item-card')?.classList.contains('is-dragging')).toBe(true), { timeout: 800 });
+    fireEvent.pointerMove(unplannedColumn, { pointerId: 12, pointerType: 'touch', clientX: 12, clientY: 12 });
+    fireEvent.pointerUp(unplannedColumn, { pointerId: 12, pointerType: 'touch', clientX: 12, clientY: 12 });
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBeNull());
+    expect(secondCard.getAttribute('aria-expanded')).toBe('false');
 
     expandCoupleCard('周末一起散步');
     fireEvent.click(screen.getByRole('button', { name: '完成：周末一起散步' }));
@@ -341,8 +379,6 @@ describe('minimal personal Todo', () => {
     expect(await screen.findByRole('button', { name: '返回个人待办' })).toBeTruthy();
     expect((await todoRepository.listTasks()).map((record) => record.id)).toEqual([task.id]);
     fireEvent.click(screen.getByRole('button', { name: '返回个人待办' }));
-    const reverse = await screen.findByTestId('space-ripple');
-    fireEvent.animationEnd(reverse);
     expect(await screen.findByRole('button', { name: '完成任务：只属于个人的任务' })).toBeTruthy();
   }, 15000);
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent } from 'react';
 import { Icon } from '../../../shared/ui/icons';
 import { todayKey } from '../data/dates';
 import { filterCoupleHistory, filterCoupleItemsByTags, formatCompletedAt, formatCoupleDate, sortOpenCoupleItems, validateHistoryRange } from './domain';
@@ -15,25 +15,27 @@ export function coupleHistoryRangeLabel(range: CoupleHistoryRange): string {
   return `近 ${range.days} 天`;
 }
 
-function CoupleCard({ item, tags, expanded, onToggle, onComplete, onEdit, dragging, onPointerDown, onHandleClick }: {
-  item: CoupleItem; tags: CoupleTag[]; expanded: boolean; onToggle: () => void; onComplete: () => void; onEdit: () => void;
-  dragging: boolean; onPointerDown: (event: PointerEvent<HTMLButtonElement>) => void; onHandleClick: () => void;
+function CoupleCard({ item, tags, expanded, onComplete, onEdit, dragging, onPointerDown, onCardClick }: {
+  item: CoupleItem; tags: CoupleTag[]; expanded: boolean; onComplete: () => void; onEdit: () => void;
+  dragging: boolean; onPointerDown: (event: PointerEvent<HTMLElement>) => void; onCardClick: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const names = tagNames(item, tags);
   return <article className={`couple-item-card ${expanded ? 'is-expanded' : ''} ${dragging ? 'is-dragging' : ''}`} data-couple-item={item.id}>
-    <div className="couple-card-actions" aria-hidden={!expanded}>
-      <button type="button" onClick={onComplete} aria-label={`完成：${item.title}`} tabIndex={expanded ? 0 : -1}><Icon name="check"/></button>
-      <button type="button" onClick={onEdit} aria-label={`编辑：${item.title}`} tabIndex={expanded ? 0 : -1}><Icon name="note"/></button>
-    </div>
-    <button type="button" className="couple-card-body" aria-expanded={expanded} onClick={onToggle}>
+    <button type="button" className="couple-card-body" aria-expanded={expanded} onPointerDown={onPointerDown} onClick={onCardClick}>
       <strong>{item.title}</strong>
       {names.length > 0 && <span className="couple-card-tags">{names.map((name) => <span key={name}>{name}</span>)}</span>}
       {item.scheduledDate && <span className="couple-card-time"><Icon name="calendar"/>{formatCoupleDate(item.scheduledDate)}<em>{item.scheduledTime ?? '不限时'}</em></span>}
       {item.note && <span className="couple-card-note">{item.note}</span>}
     </button>
-    <button type="button" className="couple-drag-handle" aria-label={`拖动安排或点击编辑：${item.title}`} title="拖到另一列调整安排；点击打开编辑" onPointerDown={onPointerDown} onClick={onHandleClick}><Icon name="calendar"/></button>
+    <div className="couple-card-actions" aria-hidden={!expanded}>
+      <button type="button" onClick={onComplete} aria-label={`完成：${item.title}`} tabIndex={expanded ? 0 : -1}><Icon name="check"/></button>
+      <button type="button" onClick={onEdit} aria-label={`编辑：${item.title}`} tabIndex={expanded ? 0 : -1}><Icon name="note"/></button>
+    </div>
+    <span className="couple-drag-handle" aria-hidden="true"><Icon name="calendar"/></span>
   </article>;
 }
+
+type DragSession = { itemId: string; pointerId: number; pointerType: string; startX: number; startY: number; body: HTMLButtonElement; dragging: boolean; moved: boolean; holdTimer?: number };
 
 export function CoupleHome({ items, tags, loading, error, selectedTags, expandedCard, toggleRef, onToggleTag, onExpand, onEdit, onComplete, onUnplan, onHistory, onRetry, onDropSchedule }: {
   items: CoupleItem[]; tags: CoupleTag[]; loading: boolean; error: string; selectedTags: string[]; expandedCard: string | null;
@@ -43,8 +45,8 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<'planned' | 'unplanned' | null>(null);
-  const dragRef = useRef<{ itemId: string; pointerId: number } | null>(null);
-  const suppressClick = useRef(false);
+  const dragRef = useRef<DragSession | null>(null);
+  const suppressClick = useRef<string | null>(null);
   const onDropRef = useRef<(item: CoupleItem, target: 'planned' | 'unplanned') => void>(() => undefined);
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
@@ -52,15 +54,24 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
     const current = dragRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
     dragRef.current = null;
+    if (current.holdTimer !== undefined) window.clearTimeout(current.holdTimer);
     setDraggingId(null);
+    if (!current.dragging) {
+      if (current.moved) {
+        suppressClick.current = current.itemId;
+        window.setTimeout(() => { if (suppressClick.current === current.itemId) suppressClick.current = null; }, 0);
+      }
+      setDropTarget(null);
+      return;
+    }
     const pointTarget = typeof document.elementFromPoint === 'function'
       ? document.elementFromPoint(event.clientX, event.clientY)
       : event.target instanceof Element ? event.target : null;
     const zone = pointTarget?.closest<HTMLElement>('[data-couple-drop-target]');
     const target = zone?.dataset.coupleDropTarget;
     setDropTarget(null);
-    suppressClick.current = true;
-    window.setTimeout(() => { suppressClick.current = false; }, 0);
+    suppressClick.current = current.itemId;
+    window.setTimeout(() => { if (suppressClick.current === current.itemId) suppressClick.current = null; }, 0);
     const item = itemById.get(current.itemId);
     if (!item || (target !== 'planned' && target !== 'unplanned')) return;
     if (target === 'planned' && item.scheduledDate === null) onDropRef.current(item, 'planned');
@@ -69,7 +80,19 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
 
   useEffect(() => {
     const move = (event: globalThis.PointerEvent) => {
-      if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return;
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      const dx = event.clientX - current.startX;
+      const dy = event.clientY - current.startY;
+      if (Math.hypot(dx, dy) > 8) {
+        current.moved = true;
+        if (current.pointerType === 'touch' && !current.dragging) {
+          if (current.holdTimer !== undefined) window.clearTimeout(current.holdTimer);
+          current.holdTimer = undefined;
+        }
+      }
+      if (!current.dragging && current.pointerType !== 'touch' && Math.hypot(dx, dy) >= 6) activateDrag(current);
+      if (!current.dragging) return;
       const pointTarget = typeof document.elementFromPoint === 'function'
         ? document.elementFromPoint(event.clientX, event.clientY)
         : event.target instanceof Element ? event.target : null;
@@ -78,7 +101,18 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
       setDropTarget(target === 'planned' || target === 'unplanned' ? target : null);
     };
     const end = (event: globalThis.PointerEvent) => finishDrag(event);
-    const cancel = () => { dragRef.current = null; setDraggingId(null); setDropTarget(null); };
+    const cancel = (event: globalThis.PointerEvent) => {
+      const current = dragRef.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      if (current.holdTimer !== undefined) window.clearTimeout(current.holdTimer);
+      if (current.dragging) {
+        suppressClick.current = current.itemId;
+        window.setTimeout(() => { if (suppressClick.current === current.itemId) suppressClick.current = null; }, 0);
+      }
+      dragRef.current = null;
+      setDraggingId(null);
+      setDropTarget(null);
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', cancel);
@@ -93,11 +127,25 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
     onDropRef.current = (item, target) => target === 'planned' ? onDropSchedule(item) : onUnplan(item);
   }, [onDropSchedule, onUnplan]);
 
-  const onHandlePointerDown = (item: CoupleItem) => (event: PointerEvent<HTMLButtonElement>) => {
+  function activateDrag(session: DragSession) {
+    if (dragRef.current !== session || session.dragging) return;
+    if (session.holdTimer !== undefined) window.clearTimeout(session.holdTimer);
+    session.holdTimer = undefined;
+    session.dragging = true;
+    setDraggingId(session.itemId);
+    if (session.pointerType === 'touch') {
+      try { session.body.setPointerCapture(session.pointerId); } catch { /* The browser may already have cancelled this touch. */ }
+    }
+  }
+
+  const onCardPointerDown = (item: CoupleItem) => (event: PointerEvent<HTMLElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    event.preventDefault();
-    dragRef.current = { itemId: item.id, pointerId: event.pointerId };
-    setDraggingId(item.id);
+    const target = event.target as HTMLElement;
+    const body = target.closest<HTMLButtonElement>('.couple-card-body');
+    if (!body || target.closest('.couple-card-actions, .couple-drag-handle, button:not(.couple-card-body), input, textarea, select')) return;
+    const session: DragSession = { itemId: item.id, pointerId: event.pointerId, pointerType: event.pointerType, startX: event.clientX, startY: event.clientY, body, dragging: false, moved: false };
+    dragRef.current = session;
+    if (event.pointerType === 'touch') session.holdTimer = window.setTimeout(() => activateDrag(session), 300);
   };
 
   const filtered = filterCoupleItemsByTags(items, selectedTags);
@@ -107,10 +155,10 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
     <div className="couple-column-title"><span><i className={kind === 'planned' ? 'planned-dot' : 'unplanned-dot'}/>{title}</span><small>{records.length}</small></div>
     <div className="couple-card-list">{records.map((item) => <CoupleCard key={item.id} item={item} tags={tags}
       expanded={expandedCard === item.id} dragging={draggingId === item.id}
-      onToggle={() => onExpand(item.id)} onComplete={() => onComplete(item)} onEdit={() => onEdit(item.id)}
-      onPointerDown={onHandlePointerDown(item)} onHandleClick={() => {
-        if (suppressClick.current) { suppressClick.current = false; return; }
-        onEdit(item.id);
+      onComplete={() => onComplete(item)} onEdit={() => onEdit(item.id)}
+      onPointerDown={onCardPointerDown(item)} onCardClick={(event) => {
+        if (suppressClick.current === item.id) { suppressClick.current = null; event.preventDefault(); return; }
+        onExpand(item.id);
       }}/>) }
     {!loading && records.length === 0 && <p className="couple-empty">{selectedTags.length ? '没有符合所选标签的事项。' : kind === 'planned' ? '还没有安排好的事项。' : '暂时没有未安排的事项。'}</p>}
     </div>
@@ -118,17 +166,17 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
 
   return <div className="todo-couple-content">
     <header className="todo-page-header couple-header">
-      <div><p className="todo-kicker">LIFE, TOGETHER</p><h1>我们的小事</h1><p className="todo-subtitle">把想一起做的事，慢慢安排好。</p></div>
+      <div><h1>我们的小事</h1></div>
       <div className="couple-header-actions">
         <button className="todo-history-entry" type="button" onClick={onHistory} aria-label="查看已完成历史" title="已完成历史"><Icon name="history"/></button>
         <button ref={toggleRef} className="todo-space-toggle heart-toggle" data-space-toggle="true" type="button" aria-label="返回个人待办" title="返回个人待办"><Icon name="heart"/></button>
       </div>
     </header>
-    <div className="couple-sync-status" role="status">仅保存在此设备 · 跨设备同步尚未配置</div>
+    <div className="couple-sync-status">仅保存在此设备</div>
     <div className="couple-filter-area">
-      <div className="couple-filter-label"><span>标签筛选</span><span>多选满足任一标签</span></div>
+      <div className="couple-filter-label"><span>标签</span><span>多选任一</span></div>
       <div className="couple-tags">{tags.map((tag) => <button type="button" key={tag.id} className={selectedTags.includes(tag.id) ? 'active' : ''} aria-pressed={selectedTags.includes(tag.id)} onClick={() => onToggleTag(tag.id)}>{tag.name}</button>)}
-      {tags.length === 0 && <span className="couple-filter-empty">编辑事项时可创建情侣标签。</span>}</div>
+      {tags.length === 0 && <span className="couple-filter-empty">添加事项时可创建标签。</span>}</div>
     </div>
     {error && <p className="todo-data-error" role="alert">{error} <button type="button" onClick={onRetry}>重试</button></p>}
     {loading && <p className="couple-loading" role="status">正在读取本机情侣事项…</p>}
@@ -136,7 +184,6 @@ export function CoupleHome({ items, tags, loading, error, selectedTags, expanded
       {renderColumn('planned', '已安排', columns.planned)}
       {renderColumn('unplanned', '未安排', columns.unplanned)}
     </div>
-    <p className="todo-demo-note">拖动卡片角标可切换安排；键盘和触屏也可打开编辑页调整日期时间。</p>
   </div>;
 }
 
@@ -202,13 +249,12 @@ export function CoupleEditorPage({ item, missing, tags, onBack, onSave, onDelete
   };
 
   if (missing || !item) return <div className="todo-subpage todo-editor">
-    <header className="todo-subpage-header"><button className="todo-back-button" type="button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">LIFE, TOGETHER</p><h1>编辑小事</h1></div></header>
+    <header className="todo-subpage-header"><button className="todo-back-button" type="button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><h1>编辑小事</h1></div></header>
     <p className="todo-data-error" role="alert">这项情侣事项已不存在或尚未读取。</p>
   </div>;
 
   return <form className="todo-subpage todo-editor couple-editor-page" onSubmit={handleSave}>
-    <header className="todo-subpage-header"><button type="button" className="todo-back-button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">LIFE, TOGETHER</p><h1>编辑小事</h1></div><span className="todo-editor-space couple-editor-label">情侣专区</span></header>
-    <p className="couple-editor-hint">选择安排日期后，这件事会进入“已安排”；清空日期即可放回“未安排”。</p>
+    <header className="todo-subpage-header"><button type="button" className="todo-back-button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><h1>编辑小事</h1></div><span className="todo-editor-space couple-editor-label">情侣专区</span></header>
     <label className="todo-form-field"><span>标题</span><input required maxLength={500} value={title} onChange={(event) => setTitle(event.target.value)} aria-label="事项标题" autoFocus/></label>
     <div className="todo-form-grid">
       <label className="todo-form-field"><span>安排日期</span><input type="date" value={date} onChange={(event) => { setDate(event.target.value); if (!event.target.value) setTime(''); }} aria-label="安排日期"/></label>
@@ -234,8 +280,8 @@ export function CoupleHistoryPage({ items, tags, selectedTags, range, onToggleTa
 }) {
   const entries = filterCoupleHistory(items, selectedTags, range);
   return <div className="todo-subpage todo-history-page">
-    <header className="todo-subpage-header"><button className="todo-back-button" type="button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">TOGETHER</p><h1>完成的时光</h1></div><button className="todo-range-button" type="button" onClick={onRange} aria-label="筛选时间范围"><Icon name="calendar"/><span>{coupleHistoryRangeLabel(range)}</span><Icon name="chevron"/></button></header>
-    <section className="history-filter-section"><div className="couple-filter-label"><span>标签筛选</span><span>多选满足任一标签</span></div><div className="couple-tags">{tags.map((tag) => <button type="button" key={tag.id} className={selectedTags.includes(tag.id) ? 'active' : ''} aria-pressed={selectedTags.includes(tag.id)} onClick={() => onToggleTag(tag.id)}>{tag.name}</button>)}
+    <header className="todo-subpage-header"><button className="todo-back-button" type="button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><h1>完成的时光</h1></div><button className="todo-range-button" type="button" onClick={onRange} aria-label="筛选时间范围"><Icon name="calendar"/><span>{coupleHistoryRangeLabel(range)}</span><Icon name="chevron"/></button></header>
+    <section className="history-filter-section"><div className="couple-filter-label"><span>标签</span><span>多选任一</span></div><div className="couple-tags">{tags.map((tag) => <button type="button" key={tag.id} className={selectedTags.includes(tag.id) ? 'active' : ''} aria-pressed={selectedTags.includes(tag.id)} onClick={() => onToggleTag(tag.id)}>{tag.name}</button>)}
       {tags.length === 0 && <span className="couple-filter-empty">暂无情侣标签。</span>}</div></section>
     {entries.length ? <section className="history-timeline" aria-label="完成时间线">{entries.map((entry, index) => <article key={entry.id} className="history-entry">
       <div className="history-rail"><i/><span className={index === entries.length - 1 ? 'last' : ''}/></div>
@@ -244,7 +290,6 @@ export function CoupleHistoryPage({ items, tags, selectedTags, range, onToggleTa
         <button type="button" className="history-restore-button" onClick={() => onRestore(entry)}>恢复到待办</button>
       </div>
     </article>)}</section> : <p className="couple-empty history-empty">这个时间范围内没有已完成的事项。</p>}
-    <p className="couple-sync-status couple-history-sync">本机记录 · 完成时间按此设备时区显示 · 跨设备同步尚未配置</p>
   </div>;
 }
 

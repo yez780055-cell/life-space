@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { NavigationSnapshot, TodoScreen, TodoSpace } from '../../app/navigation/model';
 import { Icon } from '../../shared/ui/icons';
@@ -9,11 +9,10 @@ import { reminderSchedule } from './data/reminders';
 import { todoRepository } from './data/repository';
 import { MinimalTaskEditor, PersonalTodoView, trapDialogKeyboard } from './PersonalTodoView';
 import { CoupleEditorPage, CoupleHistoryFilterDialog, CoupleHistoryPage, CoupleHome } from './couple/CoupleViews';
-import { DEFAULT_COUPLE_HISTORY_RANGE, type CoupleHistoryRange, type CoupleItem, type CoupleItemDraft } from './couple/model';
+import { DEFAULT_COUPLE_HISTORY_RANGE, type CoupleHistoryRange, type CoupleItem, type CoupleItemDraft, type CoupleTag } from './couple/model';
 import { useCoupleTodo } from './couple/useCoupleTodo';
 
 
-type RippleState = { target: TodoSpace; x: number; y: number; radius: number; left: number; top: number; width: number; height: number; running: boolean };
 type UndoEntry = { id: string; task: TaskInstance; expiresAt: number };
 
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
@@ -22,14 +21,23 @@ const dateFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'nu
 function displayDate(key: DateKey) { return dateFormatter.format(fromDateKey(key)).replace('星期', '周'); }
 function isDone(task: TaskInstance) { return task.completedAt !== null; }
 
-function TodoDialog({ kind, onBack, onNotice, targetDate, onCreatePersonal, onCreateCouple }: {
+function TodoDialog({ kind, onBack, onNotice, targetDate, coupleTags, onCreatePersonal, onCreateCouple, onCreateCoupleDetail, onCreateTag }: {
   kind: 'todo-add-personal' | 'todo-add-couple'; onBack: () => void; onNotice: (text: string) => void;
-  targetDate: DateKey | null; onCreatePersonal: (title: string, date: DateKey | null) => Promise<void>; onCreateCouple: (title: string) => Promise<void>;
+  targetDate: DateKey | null; coupleTags: CoupleTag[];
+  onCreatePersonal: (title: string, date: DateKey | null) => Promise<void>; onCreateCouple: (title: string) => Promise<void>;
+  onCreateCoupleDetail: (draft: CoupleItemDraft) => Promise<void>; onCreateTag: (name: string) => Promise<CoupleTag>;
 }) {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const quickDialogRef = useRef<HTMLFormElement>(null);
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState<DateKey | ''>(targetDate ?? todayKey());
+  const [date, setDate] = useState<DateKey | ''>(kind === 'todo-add-personal' ? targetDate ?? todayKey() : '');
+  const [coupleMode, setCoupleMode] = useState<'quick' | 'detail'>('quick');
+  const [time, setTime] = useState('');
+  const [note, setNote] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [pendingTags, setPendingTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
+  const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const personal = kind === 'todo-add-personal';
 
@@ -40,37 +48,71 @@ function TodoDialog({ kind, onBack, onNotice, targetDate, onCreatePersonal, onCr
     return () => document.removeEventListener('keydown', handleKey);
   }, [onBack]);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalized = title.trim();
     if (!normalized || saving) return;
     setSaving(true);
-    const save = personal ? onCreatePersonal(normalized, date ? date as DateKey : null) : onCreateCouple(normalized);
-    void save.then(() => {
+    setFormError('');
+    try {
+      if (personal) {
+        await onCreatePersonal(normalized, date ? date as DateKey : null);
+      } else if (coupleMode === 'quick') {
+        await onCreateCouple(normalized);
+      } else {
+        const tagIds = [...selectedTags];
+        for (const name of pendingTags) tagIds.push((await onCreateTag(name)).id);
+        await onCreateCoupleDetail({ title: normalized, scheduledDate: date ? date as DateKey : null, scheduledTime: date ? time || null : null, tags: [...new Set(tagIds)], note });
+        onBack();
+        return;
+      }
       setTitle('');
-      setSaving(false);
       requestAnimationFrame(() => titleInputRef.current?.focus({ preventScroll: true }));
-    }).catch((error: unknown) => {
-      setSaving(false);
-      onNotice(error instanceof Error ? error.message : '保存失败，请保留输入后重试。');
-    });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败，请保留输入后重试。';
+      if (!personal && coupleMode === 'detail') setFormError(message);
+      else onNotice(message);
+    } finally { setSaving(false); }
   };
 
-  return <div className={'todo-dialog-backdrop' + (personal ? ' todo-minimal-quick-backdrop' : '')} onMouseDown={(event) => { if (event.target === event.currentTarget) onBack(); }}>
-    <form ref={quickDialogRef} className={'todo-quick-dialog' + (personal ? ' todo-minimal-quick-dialog' : '')} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="quick-title-heading">
+  const addTag = async () => {
+    if (!newTag.trim() || saving) return;
+    const name = newTag.trim().replace(/\s+/g, ' ');
+    setFormError('');
+    setPendingTags((current) => current.some((value) => value.toLocaleLowerCase() === name.toLocaleLowerCase()) ? current : [...current, name]);
+    setNewTag('');
+  };
+
+  return <div className={'todo-dialog-backdrop' + (personal ? ' todo-minimal-quick-backdrop' : ' todo-couple-add-backdrop')} onMouseDown={(event) => { if (event.target === event.currentTarget) onBack(); }}>
+    <form ref={quickDialogRef} className={'todo-quick-dialog' + (personal ? ' todo-minimal-quick-dialog' : ' todo-couple-add-dialog')} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="quick-title-heading">
       <button type="button" className="todo-dialog-close" onClick={onBack} aria-label="关闭"><Icon name="close"/></button>
       <span className="todo-dialog-mark"><Icon name={personal ? 'plus' : 'heart'}/></span>
-      <p className="todo-kicker">{personal ? 'QUICK CAPTURE' : 'LIFE, TOGETHER'}</p>
-      <h2 id="quick-title-heading">{personal ? '快速添加' : '记一件我们的小事'}</h2>
+      {personal && <p className="todo-kicker">QUICK CAPTURE</p>}
+      <h2 id="quick-title-heading">{personal ? '快速添加' : coupleMode === 'quick' ? '快速添加小事' : '详细添加小事'}</h2>
+      {!personal && <div className="couple-add-modes" role="group" aria-label="添加方式">
+        <button type="button" disabled={saving} aria-pressed={coupleMode === 'quick'} className={coupleMode === 'quick' ? 'active' : ''} onClick={() => setCoupleMode('quick')}>快速</button>
+        <button type="button" disabled={saving} aria-pressed={coupleMode === 'detail'} className={coupleMode === 'detail' ? 'active' : ''} onClick={() => setCoupleMode('detail')}>详细</button>
+      </div>}
       <label className="todo-form-field"><span>{personal ? '任务内容' : '事项标题'}</span>
         <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={personal ? '想做什么？' : '想一起做些什么？'} aria-label={personal ? '任务内容' : '事项标题'} maxLength={500} disabled={saving}/>
       </label>
       {personal
         ? <label className="todo-form-field"><span>日期</span><input type="date" value={date} onChange={(event) => setDate(event.target.value as DateKey | '')} aria-label="任务日期" disabled={saving}/></label>
-        : <div className="todo-quick-destination"><Icon name="calendar"/><span>默认放入未安排</span></div>}
-      {!personal && <p className="todo-form-disclaimer">只保存在此设备；跨设备同步尚未配置。</p>}
+        : coupleMode === 'quick'
+          ? <div className="todo-quick-destination"><Icon name="calendar"/><span>添加到未安排</span></div>
+          : <>
+            <div className="todo-form-grid">
+              <label className="todo-form-field"><span>安排日期</span><input type="date" value={date} onChange={(event) => { setDate(event.target.value as DateKey | ''); if (!event.target.value) setTime(''); }} aria-label="安排日期" disabled={saving}/></label>
+              <label className="todo-form-field"><span>时间（可选）</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} aria-label="安排时间" disabled={!date || saving}/></label>
+            </div>
+            <div className="todo-form-field"><span>标签</span><div className="todo-editor-tags couple-add-tags">{coupleTags.map((tag) => <button type="button" disabled={saving} className={selectedTags.includes(tag.id) ? 'active' : ''} aria-pressed={selectedTags.includes(tag.id)} key={tag.id} onClick={() => setSelectedTags((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])}>{tag.name}</button>)}{pendingTags.map((name) => <button type="button" className="active is-pending-tag" aria-pressed="true" key={name} title="提交后创建" onClick={() => setPendingTags((current) => current.filter((value) => value !== name))}>{name}</button>)}{coupleTags.length === 0 && pendingTags.length === 0 && <span className="couple-filter-empty">暂无标签</span>}</div>
+              <div className="couple-tag-create"><input aria-label="新建情侣标签" maxLength={40} value={newTag} onChange={(event) => setNewTag(event.target.value)} placeholder="新建标签" disabled={saving}/><button type="button" className="todo-secondary-button" disabled={!newTag.trim() || saving} onClick={() => void addTag()}>添加标签</button></div>
+            </div>
+            <label className="todo-form-field"><span>备注</span><textarea rows={3} maxLength={5000} value={note} onChange={(event) => setNote(event.target.value)} placeholder="备注（可选）" disabled={saving}/></label>
+          </>}
+      {formError && <p className="todo-data-error" role="alert">{formError}</p>}
       <div className="todo-dialog-actions"><button type="button" className="todo-secondary-button" onClick={onBack}>关闭</button>
-        <button className="todo-primary-button" type="submit" disabled={!title.trim() || saving}>{saving ? '添加中…' : '添加'}</button>
+        <button className={'todo-primary-button' + (!personal ? ' couple' : '')} type="submit" disabled={!title.trim() || saving}>{saving ? '添加中…' : '添加'}</button>
       </div>
     </form>
   </div>;
@@ -107,15 +149,11 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const [quickTargetDate, setQuickTargetDate] = useState<DateKey | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskInstance | null>(null);
   const [quickMessage, setQuickMessage] = useState("");
-  const [ripple, setRipple] = useState<RippleState | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const [spaceChanging, setSpaceChanging] = useState(false);
   const spaceToggleRef = useRef<HTMLButtonElement>(null);
   const editorTriggerRef = useRef<HTMLElement | null>(null);
   const quickAddTriggerRef = useRef<HTMLElement | null>(null);
-  const focusSpaceAfterChange = useRef<TodoSpace | null>(null);
-  const rippleBusy = useRef(false);
-  const finishRippleRef = useRef<() => void>(() => undefined);
-  const animationTimer = useRef<number | undefined>(undefined);
+  const previousSpace = useRef(snapshot.todoSpace);
   const noticeTimer = useRef<number | undefined>(undefined);
   const reminderTimers = useRef<Map<string, number>>(new Map());
   const sentReminders = useRef<Set<string>>(new Set());
@@ -140,10 +178,15 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     return () => { activeRequest = false; };
   }, [refreshData]);
 
-  useEffect(() => {
-    if (focusSpaceAfterChange.current !== snapshot.todoSpace) return;
-    focusSpaceAfterChange.current = null;
-    requestAnimationFrame(() => spaceToggleRef.current?.focus({ preventScroll: true }));
+  useLayoutEffect(() => {
+    if (previousSpace.current === snapshot.todoSpace) return;
+    previousSpace.current = snapshot.todoSpace;
+    setSpaceChanging(true);
+    const frame = requestAnimationFrame(() => {
+      setSpaceChanging(false);
+      requestAnimationFrame(() => spaceToggleRef.current?.focus({ preventScroll: true }));
+    });
+    return () => cancelAnimationFrame(frame);
   }, [snapshot.todoSpace]);
 
   const onNotice = useCallback((message: string) => {
@@ -205,30 +248,10 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     };
   }, [notificationPermission, occurrenceRecords, reminderRefreshTick, taskRecords, onNotice]);
 
-  function finishRipple(target?: TodoSpace) {
-    if (!rippleBusy.current) return;
-    const next = target ?? ripple?.target;
-    rippleBusy.current = false;
-    if (animationTimer.current !== undefined) window.clearTimeout(animationTimer.current);
-    animationTimer.current = undefined;
-    finishRippleRef.current = () => undefined;
-    setRipple(null);
-    if (next) onSpaceChange(next);
-  }
-
   useEffect(() => {
     const timers = reminderTimers.current;
     const undoTimeouts = undoTimers.current;
-    const settle = () => finishRippleRef.current();
-    const onVisibility = () => { if (document.visibilityState === "hidden") settle(); };
-    window.addEventListener("resize", settle);
-    window.addEventListener("orientationchange", settle);
-    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener("resize", settle);
-      window.removeEventListener("orientationchange", settle);
-      document.removeEventListener("visibilitychange", onVisibility);
-      if (animationTimer.current !== undefined) window.clearTimeout(animationTimer.current);
       if (noticeTimer.current !== undefined) window.clearTimeout(noticeTimer.current);
       for (const timer of timers.values()) window.clearTimeout(timer);
       timers.clear();
@@ -237,26 +260,6 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
       if (coupleUndoTimer.current !== undefined) window.clearTimeout(coupleUndoTimer.current);
     };
   }, []);
-
-  function startSpaceChange(target: TodoSpace, button: HTMLButtonElement) {
-    if (rippleBusy.current) return;
-    focusSpaceAfterChange.current = target;
-    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    if (reduceMotion) { onSpaceChange(target); return; }
-    const holder = rootRef.current?.closest(".module-holder") as HTMLElement | null;
-    const bounds = holder?.getBoundingClientRect() ?? rootRef.current?.getBoundingClientRect();
-    const buttonBounds = button.getBoundingClientRect();
-    if (!bounds || !bounds.width || !bounds.height) { onSpaceChange(target); return; }
-    const x = Math.max(0, Math.min(bounds.width, buttonBounds.left + buttonBounds.width / 2 - bounds.left));
-    const y = Math.max(0, Math.min(bounds.height, buttonBounds.top + buttonBounds.height / 2 - bounds.top));
-    const radius = Math.max(Math.hypot(x, y), Math.hypot(bounds.width - x, y), Math.hypot(x, bounds.height - y), Math.hypot(bounds.width - x, bounds.height - y)) + 4;
-    const finish = () => finishRipple(target);
-    rippleBusy.current = true;
-    finishRippleRef.current = finish;
-    setRipple({ target, x, y, radius, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height, running: false });
-    requestAnimationFrame(() => setRipple((current) => current ? { ...current, running: true } : current));
-    animationTimer.current = window.setTimeout(finish, 720);
-  }
 
   const currentOverlay = snapshot.surfaces.at(-1);
   const showQuickAdd = currentOverlay === "todo-add-personal" || currentOverlay === "todo-add-couple";
@@ -381,6 +384,10 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     await coupleData.createQuick(title);
     onNotice('已添加到未安排。');
   };
+  const createCoupleDetailed = async (draft: CoupleItemDraft) => {
+    await coupleData.save(draft);
+    onNotice('情侣事项已保存到此设备。');
+  };
   const openCoupleEditor = (id: string) => {
     setSelectedCoupleItemId(id);
     setExpandedCard(null);
@@ -494,7 +501,6 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     onDropSchedule: scheduleByDrop
   };
   const coupleHome = <CoupleHome {...coupleHomeProps}/>;
-  const couplePreviewProps = { ...coupleHomeProps, items: [], tags: [], loading: false, error: '', selectedTags: [], expandedCard: null, toggleRef: () => undefined, onToggleTag: () => undefined, onExpand: () => undefined, onEdit: () => undefined, onComplete: () => undefined, onUnplan: () => undefined, onHistory: () => undefined, onRetry: () => undefined, onDropSchedule: () => undefined };
   const coupleEditorItem = coupleData.items.find((item) => item.id === selectedCoupleItemId) ?? null;
   let layout: ReactNode;
   if (snapshot.todoScreen === 'couple-editor') {
@@ -521,29 +527,21 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-space-toggle='true']");
     if (!button) return;
     spaceToggleRef.current = button;
-    startSpaceChange(snapshot.todoSpace === "personal" ? "couple" : "personal", button);
+    onSpaceChange(snapshot.todoSpace === "personal" ? "couple" : "personal");
   };
-  const preview = ripple && <div className={"todo-ripple-layer " + (ripple.running ? "is-running" : "")} data-testid="space-ripple" data-target-space={ripple.target} aria-hidden="true" inert
-    style={{ left: ripple.left, top: ripple.top, width: ripple.width, height: ripple.height, "--ripple-x": ripple.x + "px", "--ripple-y": ripple.y + "px", "--ripple-radius": ripple.radius + "px" } as CSSProperties}
-    onAnimationEnd={(event) => { if (event.target === event.currentTarget) finishRipple(ripple.target); }}>
-    <div className="todo-ripple-content"><div className={"todo-module-page todo-page-" + ripple.target}>
-      {ripple.target === "personal" ? <PersonalTodoView {...personalHomeProps}/> : <CoupleHome {...couplePreviewProps}/> }
-    </div>{ripple.target === "personal" ? <div className="todo-minimal-fab todo-preview-fab" aria-hidden="true"><Icon name="plus"/></div> : <div className="todo-fab todo-fab-couple todo-preview-fab" aria-hidden="true"><Icon name="plus"/><span>加一件小事</span></div>}</div>
-  </div>;
 
   return <>
-    <div ref={rootRef} className="todo-module-root" data-current-space={snapshot.todoSpace} data-loading={dataLoading ? "true" : "false"} aria-busy={rippleBusy.current} aria-hidden={isPersonalEditor || showQuickAdd || showRangeDialog || undefined} inert={!!ripple || isPersonalEditor || showQuickAdd || showRangeDialog} onClick={isHomeScreen ? handleRootToggle : undefined}>
-      <section className={"todo-module-page todo-page-" + snapshot.todoSpace} aria-label={snapshot.todoSpace === "personal" ? "待办" : "我们的小事"}>
+    <div className="todo-module-root" data-current-space={snapshot.todoSpace} data-loading={dataLoading ? "true" : "false"} aria-hidden={isPersonalEditor || showQuickAdd || showRangeDialog || undefined} inert={isPersonalEditor || showQuickAdd || showRangeDialog} onClick={isHomeScreen ? handleRootToggle : undefined}>
+      <section className={"todo-module-page todo-page-" + snapshot.todoSpace + (spaceChanging ? ' is-space-changing' : '')} aria-label={snapshot.todoSpace === "personal" ? "待办" : "我们的小事"}>
         {dataError && snapshot.todoSpace === "personal" && <p className="todo-data-error" role="alert">{dataError} 请检查存储空间后重试。 <button type="button" onClick={() => { setDataLoading(true); void refreshData().catch((error: unknown) => { setDataLoading(false); setDataError(error instanceof Error ? error.message : "读取失败。"); }); }}>重试</button></p>}
         {layout}
       </section>
     </div>
-    {preview && createPortal(preview, document.body)}
     {personalEditorOverlay}
-    {active && isHomeScreen && !dialogKind && !showRangeDialog && !ripple && snapshot.todoSpace === "couple" && <FloatingAdd space="couple" onClick={() => showSurface("todo-add-couple")}/>}
-    {active && dialogKind && <TodoDialog kind={dialogKind} onBack={onBack} onNotice={onNotice} targetDate={quickTargetDate} onCreatePersonal={createPersonalTask} onCreateCouple={createCoupleQuick}/>}
+    {active && isHomeScreen && !dialogKind && !showRangeDialog && snapshot.todoSpace === "couple" && <FloatingAdd space="couple" onClick={() => showSurface("todo-add-couple")}/>}
+    {active && dialogKind && <TodoDialog kind={dialogKind} onBack={onBack} onNotice={onNotice} targetDate={quickTargetDate} coupleTags={coupleData.tags} onCreatePersonal={createPersonalTask} onCreateCouple={createCoupleQuick} onCreateCoupleDetail={createCoupleDetailed} onCreateTag={createCoupleTag}/>}
     {active && showRangeDialog && snapshot.todoScreen === 'couple-history' && <CoupleHistoryFilterDialog range={historyRange} onBack={onBack} onApply={setHistoryRange}/>}
-    {active && isHomeScreen && !ripple && snapshot.todoSpace === 'couple' && coupleUndoEntry && <div className="todo-undo-toast" role="status" aria-live="polite">
+    {active && isHomeScreen && snapshot.todoSpace === 'couple' && coupleUndoEntry && <div className="todo-undo-toast" role="status" aria-live="polite">
       <span>已完成「{coupleUndoEntry.title}」</span><button type="button" aria-label={`撤销完成：${coupleUndoEntry.title}`} onClick={undoCoupleCompletion}>撤销</button>
     </div>}
     {active && isHomeScreen && snapshot.todoSpace === 'personal' && undoEntries.at(-1) && <div className="todo-undo-toast" role="status" aria-live="polite">
