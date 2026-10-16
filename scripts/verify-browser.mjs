@@ -20,6 +20,23 @@ async function waitForTodoData(page) {
   await page.waitForFunction(() => document.querySelector('.todo-module-root')?.getAttribute('data-loading') === 'false');
 }
 
+async function waitForLastModule(page, expectedModule) {
+  await page.waitForFunction(async (expected) => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('life-space');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = database.transaction('settings', 'readonly').objectStore('settings').get('lastModule');
+        request.onsuccess = () => resolve(request.result === expected);
+        request.onerror = () => reject(request.error);
+      });
+    } finally { database.close(); }
+  }, expectedModule);
+}
+
 async function swipe(page, selector, fromX, fromY, toX, toY) {
   await page.locator(selector).evaluate((element, point) => {
     const start = new Touch({ identifier: 1, target: element, clientX: point.fromX, clientY: point.fromY });
@@ -378,6 +395,7 @@ try {
   if (await page.getByRole('button', { name: '回到今天' }).count()) await page.getByRole('button', { name: '回到今天' }).click();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
 
+  await waitForLastModule(page, 'todo');
   await page.reload();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
   await page.getByRole('button', { name: '全部' }).click();

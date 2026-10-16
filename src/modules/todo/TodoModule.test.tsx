@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../app/shell/App';
 import { DB_NAME, resetDatabaseConnectionForTests } from '../../shared/storage/database';
 import { addDays, todayKey } from './data/dates';
@@ -333,8 +333,12 @@ describe('minimal personal Todo', () => {
     await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
     expect(secondCard.getAttribute('aria-expanded')).toBe('false');
 
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
     fireEvent.pointerDown(secondCard, { pointerId: 12, pointerType: 'touch', button: 0, clientX: 10, clientY: 10 });
-    await waitFor(() => expect(secondCard.closest('.couple-item-card')?.classList.contains('is-dragging')).toBe(true), { timeout: 800 });
+    const holdCallback = setTimeoutSpy.mock.calls.find(([, delay]) => delay === 300)?.[0];
+    expect(typeof holdCallback).toBe('function');
+    act(() => { if (typeof holdCallback === 'function') holdCallback(); });
+    expect(secondCard.closest('.couple-item-card')?.classList.contains('is-dragging')).toBe(true);
     fireEvent.pointerMove(unplannedColumn, { pointerId: 12, pointerType: 'touch', clientX: 12, clientY: 12 });
     fireEvent.pointerUp(unplannedColumn, { pointerId: 12, pointerType: 'touch', clientX: 12, clientY: 12 });
     await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBeNull());
