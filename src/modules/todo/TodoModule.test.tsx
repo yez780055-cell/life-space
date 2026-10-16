@@ -4,6 +4,7 @@ import App from '../../app/shell/App';
 import { DB_NAME, resetDatabaseConnectionForTests } from '../../shared/storage/database';
 import { addDays, todayKey } from './data/dates';
 import { todoRepository } from './data/repository';
+import { coupleRepository } from './couple/repository';
 
 function rect(left: number, top: number, width: number, height: number) {
   return { left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) } as DOMRect;
@@ -35,6 +36,25 @@ async function enterCouple() {
 
 async function waitForTodoData() {
   await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-loading')).toBe('false'));
+}
+
+function coupleEditor() {
+  const form = document.querySelector<HTMLFormElement>('.couple-editor-page');
+  if (!form) throw new Error('情侣事项编辑页尚未打开。');
+  return form;
+}
+
+function coupleCard(title: string) {
+  const card = [...document.querySelectorAll<HTMLButtonElement>('.couple-card-body')]
+    .find((button) => button.querySelector('strong')?.textContent === title);
+  if (!card) throw new Error(`没有找到情侣事项卡片：${title}`);
+  return card;
+}
+
+function expandCoupleCard(title: string) {
+  const card = coupleCard(title);
+  if (card.getAttribute('aria-expanded') !== 'true') fireEvent.click(card);
+  return card;
 }
 
 beforeEach(async () => {
@@ -214,22 +234,117 @@ describe('minimal personal Todo', () => {
     expect(await todoRepository.listOccurrences()).toEqual([]);
   });
 
-  it('keeps personal task data intact while opening and leaving the couple demo', async () => {
+  it('persists real couple tasks, filters by OR tags, records and restores completion, and preserves personal data', async () => {
     const task = await todoRepository.createQuickTask('只属于个人的任务', todayKey());
     mockViewportRects();
     render(<App/>);
     await screen.findByRole('button', { name: '完成任务：只属于个人的任务' });
+    await waitForTodoData();
     await enterCouple();
-    const firstCard = screen.getByRole('button', { name: /找一家喜欢的日料店/ });
-    fireEvent.click(firstCard);
-    expect(firstCard.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('button', { name: '返回个人待办' })).toBeTruthy();
+    expect(screen.getByText('仅保存在此设备 · 跨设备同步尚未配置')).toBeTruthy();
+    expect(screen.getByText('还没有安排好的事项。')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '新增情侣事项' }));
+    let dialog = await screen.findByRole('dialog', { name: '记一件我们的小事' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '事项标题' }), { target: { value: '一起散步' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '添加' }));
+    await waitFor(async () => expect((await coupleRepository.listItems()).map((item) => item.title)).toContain('一起散步'));
+    await waitFor(() => expect((within(dialog).getByRole('textbox', { name: '事项标题' }) as HTMLInputElement).value).toBe(''));
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '记一件我们的小事' })).toBeNull());
+
+    fireEvent.click(coupleCard('一起散步'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑：一起散步' }));
+    let editor = coupleEditor();
+    fireEvent.change(within(editor).getByRole('textbox', { name: '事项标题' }), { target: { value: '周末一起散步' } });
+    fireEvent.change(within(editor).getByLabelText('安排日期'), { target: { value: todayKey() } });
+    fireEvent.change(within(editor).getByLabelText('安排时间'), { target: { value: '18:30' } });
+    fireEvent.change(within(editor).getByRole('textbox', { name: '备注' }), { target: { value: '带上相机' } });
+    fireEvent.change(within(editor).getByRole('textbox', { name: '新建情侣标签' }), { target: { value: '周末' } });
+    fireEvent.click(within(editor).getByRole('button', { name: '添加标签' }));
+    expect(await within(editor).findByRole('button', { name: '周末' })).toBeTruthy();
+    fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(coupleCard('周末一起散步')).toBeTruthy());
+    await waitFor(async () => expect(await coupleRepository.listItems()).toEqual([expect.objectContaining({ title: '周末一起散步', scheduledDate: todayKey(), scheduledTime: '18:30', note: '带上相机', tags: [expect.any(String)] })]));
+
+    fireEvent.click(screen.getByRole('button', { name: '新增情侣事项' }));
+    dialog = await screen.findByRole('dialog', { name: '记一件我们的小事' });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '事项标题' }), { target: { value: '在家看电影' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '添加' }));
+    await waitFor(async () => expect((await coupleRepository.listItems()).map((item) => item.title)).toContain('在家看电影'));
+    await waitFor(() => expect((within(dialog).getByRole('textbox', { name: '事项标题' }) as HTMLInputElement).value).toBe(''));
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '记一件我们的小事' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: '在家看电影' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑：在家看电影' }));
+    editor = coupleEditor();
+    fireEvent.change(within(editor).getByRole('textbox', { name: '新建情侣标签' }), { target: { value: '居家' } });
+    fireEvent.click(within(editor).getByRole('button', { name: '添加标签' }));
+    expect(await within(editor).findByRole('button', { name: '居家' })).toBeTruthy();
+    fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(coupleCard('在家看电影')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '周末' }));
+    await waitFor(() => expect(document.querySelectorAll('.couple-card-body')).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: '居家' }));
+    await waitFor(() => expect(document.querySelectorAll('.couple-card-body')).toHaveLength(2));
+
+    const secondHandle = screen.getByRole('button', { name: '拖动安排或点击编辑：在家看电影' });
+    const plannedColumn = screen.getByRole('region', { name: '已安排' });
+    fireEvent.pointerDown(secondHandle, { pointerId: 7, pointerType: 'mouse', button: 0 });
+    fireEvent.pointerMove(plannedColumn, { pointerId: 7, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(plannedColumn, { pointerId: 7, clientX: 10, clientY: 10 });
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
+    const plannedHandle = screen.getByRole('button', { name: '拖动安排或点击编辑：在家看电影' });
+    const unplannedColumn = screen.getByRole('region', { name: '未安排' });
+    fireEvent.pointerDown(plannedHandle, { pointerId: 8, pointerType: 'mouse', button: 0 });
+    fireEvent.pointerMove(unplannedColumn, { pointerId: 8, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(unplannedColumn, { pointerId: 8, clientX: 10, clientY: 10 });
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBeNull());
+
+    expandCoupleCard('周末一起散步');
+    fireEvent.click(screen.getByRole('button', { name: '完成：周末一起散步' }));
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '周末一起散步')?.completedAt).toEqual(expect.any(Number)));
+    fireEvent.click(await screen.findByRole('button', { name: '撤销完成：周末一起散步' }));
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '周末一起散步')?.completedAt).toBeNull());
+    await waitFor(() => expect(coupleCard('周末一起散步')).toBeTruthy());
+
+    expandCoupleCard('周末一起散步');
+    fireEvent.click(screen.getByRole('button', { name: '完成：周末一起散步' }));
+    await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '周末一起散步')?.completedAt).toEqual(expect.any(Number)));
+    fireEvent.click(screen.getByRole('button', { name: '查看已完成历史' }));
+    expect(await screen.findByRole('heading', { name: '完成的时光' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '周末一起散步' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '筛选时间范围' }));
+    const rangeDialog = await screen.findByRole('dialog', { name: '选择时间范围' });
+    fireEvent.click(within(rangeDialog).getByRole('button', { name: '自定义时间段' }));
+    fireEvent.change(within(rangeDialog).getByLabelText('开始日期'), { target: { value: todayKey() } });
+    fireEvent.change(within(rangeDialog).getByLabelText('结束日期'), { target: { value: todayKey() } });
+    fireEvent.click(within(rangeDialog).getByRole('button', { name: '完成' }));
+    expect(await screen.findByRole('heading', { name: '周末一起散步' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '恢复到待办' }));
+    expect(await screen.findByText('这个时间范围内没有已完成的事项。')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }));
+    await screen.findByRole('button', { name: '返回个人待办' });
+    fireEvent.click(coupleCard('在家看电影'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑：在家看电影' }));
+    editor = coupleEditor();
+    fireEvent.click(within(editor).getByRole('button', { name: '删除' }));
+    expect(within(editor).getByRole('group', { name: '确认删除事项' })).toBeTruthy();
+    fireEvent.click(within(editor).getByRole('button', { name: '取消删除' }));
+    expect((await coupleRepository.listItems()).map((item) => item.title)).toContain('在家看电影');
+    fireEvent.click(within(editor).getByRole('button', { name: '删除' }));
+    fireEvent.click(within(editor).getByRole('button', { name: '确认删除' }));
+    await waitFor(async () => expect((await coupleRepository.listItems()).map((item) => item.title)).not.toContain('在家看电影'));
+
+    expect(await screen.findByRole('button', { name: '返回个人待办' })).toBeTruthy();
     expect((await todoRepository.listTasks()).map((record) => record.id)).toEqual([task.id]);
     fireEvent.click(screen.getByRole('button', { name: '返回个人待办' }));
     const reverse = await screen.findByTestId('space-ripple');
     fireEvent.animationEnd(reverse);
     expect(await screen.findByRole('button', { name: '完成任务：只属于个人的任务' })).toBeTruthy();
-  });
+  }, 15000);
 
   it('keeps Period, Anniversary, and Settings navigation available', async () => {
     render(<App/>);

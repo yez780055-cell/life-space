@@ -1,4 +1,14 @@
-# Phase 2B 网页验证记录
+# Life Space 网页验证记录
+
+## Phase 2C 情侣待办验证（2026-10-16）
+
+- 基线核验：当前分支 `feat/todo-phase-2c` 的 HEAD 为 `e5f011a35bcfcccf2e7dd9ec5a78fb4b9fa91c40`；`git merge-base --is-ancestor` 确认该 Phase 2B 基线已包含在当前分支。
+- `npm test -- --run`：通过，9 个测试文件、58 项。
+- `npm run typecheck`、`npm run lint`、`npm test -- --run`、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机生产预览验证通过，使用 Microsoft Edge（Chromium）。桌面检查覆盖情侣事项新增/编辑/删除、安排与未安排拖动、日期时间保存、多标签 OR、完成/撤销、历史范围筛选/恢复，以及个人待办数据和 Period、Anniversary、设置导航保留。
+- 移动触控上下文覆盖 390×844，以及 320、360、390、430px 宽度；情侣和个人待办均无横向溢出，并检查情侣快速新增、完成与撤销。PWA scope、manifest 和 Service Worker 控制状态均与本机预览 URL 匹配。
+- 浏览器截图保存在忽略目录 `.artifacts/browser-preview`，不纳入提交。
+- Supabase 迁移只完成源码审阅；当前环境没有 PostgreSQL、Docker 或 Supabase CLI，因此没有在数据库实例中解析或执行。该迁移尚未应用，应用也没有账号、配对或远程 repository；跨设备同步未启用。
 
 ## Todo 极简重构（2026-10-16）
 

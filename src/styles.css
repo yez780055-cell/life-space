@@ -514,3 +514,38 @@
   .todo-minimal-edit{width:30px}
   .todo-minimal-completed-toggle{padding:0 12px}
 }
+
+/* Phase 2C couple tasks: local-only state, accessible scheduling, and real history */
+.couple-sync-status{display:inline-flex;align-items:center;max-width:100%;margin:0 0 14px;padding:7px 10px;border:1px solid #eadbd5;border-radius:10px;background:#fffaf7;color:#9b7c74;font-size:10px;line-height:1.5}
+.couple-history-sync{margin-top:16px}
+.couple-filter-empty{color:#a3918b;font-size:10px}
+.couple-loading{margin:10px 0;color:#8d7e7a;font-size:11px}
+.couple-empty{margin:0;padding:14px 8px;border:1px dashed #eadfda;border-radius:13px;color:#a18e88;font-size:10px;line-height:1.7;text-align:center}
+.history-empty{margin-top:20px}
+.couple-column.is-drop-target{border-radius:16px;outline:2px dashed #c7a39a;outline-offset:6px;background:#f9f0ec66}
+.couple-item-card.is-dragging{opacity:.55;transform:scale(.985)}
+.couple-drag-handle{position:absolute;z-index:3;top:7px;right:7px;width:26px;height:26px;display:grid;place-items:center;padding:0;border:1px solid #f0e4df;border-radius:8px;background:#fffaf7;color:#a88780;touch-action:none;cursor:grab}
+.couple-drag-handle:active{cursor:grabbing}
+.couple-drag-handle svg{width:14px;height:14px}
+.couple-item-card.is-expanded .couple-drag-handle{opacity:0;pointer-events:none}
+.couple-card-note{display:-webkit-box;max-width:100%;overflow:hidden;color:#9a8a85;font-size:9px;line-height:1.5;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.couple-editor-hint{margin:-13px 0 20px;color:#9a8983;font-size:11px;line-height:1.7}
+.couple-tag-create{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px}
+.couple-tag-create input{min-width:0;min-height:40px;padding:9px 11px;border:1px solid #e7eceb;border-radius:11px;background:#fff;color:#435155;font:inherit;font-size:12px}
+.couple-tag-create input:focus{outline:2px solid #d9b9b2;outline-offset:1px}
+.couple-editor-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:26px}
+.couple-delete-button{min-height:40px;padding:9px 13px;border:1px solid #eedbd5;border-radius:11px;background:#fff8f6;color:#a7665d;font-size:11px}
+.couple-delete-button:disabled{opacity:.55}
+.couple-delete-confirm{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin:22px 0 0;padding:12px;border:1px solid #eedbd5;border-radius:12px;background:#fff8f6;color:#8f6c65;font-size:11px}
+.couple-delete-confirm span{flex:1 1 100%}
+.history-restore-button{margin-top:10px;padding:6px 9px;border:1px solid #eadbd5;border-radius:9px;background:#fffaf7;color:#96776f;font-size:10px}
+.history-entry-content time{display:block}
+
+@media(max-width:700px){
+  .couple-drag-handle{top:6px;right:6px;width:24px;height:24px}
+  .couple-editor-footer{align-items:stretch}
+  .couple-editor-footer>.todo-form-actions{flex:1}
+  .couple-editor-footer .todo-primary-button,.couple-editor-footer .todo-secondary-button{min-width:72px}
+  .couple-tag-create{grid-template-columns:minmax(0,1fr) auto;gap:6px}
+  .couple-tag-create .todo-secondary-button{min-width:78px;padding:9px 10px}
+}

@@ -8,127 +8,45 @@ import { allInstances, occurrencesInRange } from './data/recurrence';
 import { reminderSchedule } from './data/reminders';
 import { todoRepository } from './data/repository';
 import { MinimalTaskEditor, PersonalTodoView, trapDialogKeyboard } from './PersonalTodoView';
+import { CoupleEditorPage, CoupleHistoryFilterDialog, CoupleHistoryPage, CoupleHome } from './couple/CoupleViews';
+import { DEFAULT_COUPLE_HISTORY_RANGE, type CoupleHistoryRange, type CoupleItem, type CoupleItemDraft } from './couple/model';
+import { useCoupleTodo } from './couple/useCoupleTodo';
 
-type CoupleItem = { id: string; title: string; tags: string[]; planned?: string; time?: string };
+
 type RippleState = { target: TodoSpace; x: number; y: number; radius: number; left: number; top: number; width: number; height: number; running: boolean };
 type UndoEntry = { id: string; task: TaskInstance; expiresAt: number };
 
-const coupleItems: CoupleItem[] = [
-  { id: 'dinner', title: '找一家喜欢的日料店', tags: ['一起吃饭', '约会'], planned: plannedDate(2), time: '18:30' },
-  { id: 'market', title: '去逛周末花市', tags: ['一起出门'], planned: plannedDate(4), time: '10:00' },
-  { id: 'movie', title: '在家看一部老电影', tags: ['在家'], planned: plannedDate(5), time: '20:00' },
-  { id: 'lake', title: '找个天气好的傍晚去湖边', tags: ['一起出门', '约会'] },
-  { id: 'dessert', title: '试试那家新开的甜品店', tags: ['一起吃饭'] },
-  { id: 'photos', title: '把最近的照片洗出来', tags: ['纪念'] }
-];
-const historySamples = [
-  { title: '在家一起做了晚饭', completed: '今天 20:15', tags: ['在家', '一起吃饭'] },
-  { title: '去西太湖散步看日落', completed: '10月11日 18:42', tags: ['一起出门'] },
-  { title: '挑了一束喜欢的花', completed: '10月8日 16:20', tags: ['纪念'] },
-  { title: '周末一起看了电影', completed: '10月4日 21:06', tags: ['约会', '在家'] }
-];
-const allTags = ['约会', '一起吃饭', '一起出门', '在家', '纪念'];
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
 
-function plannedDate(offset: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
-}
 
 function displayDate(key: DateKey) { return dateFormatter.format(fromDateKey(key)).replace('星期', '周'); }
 function isDone(task: TaskInstance) { return task.completedAt !== null; }
 
-function DemoNotice({ children }: { children: ReactNode }) {
-  return <p className="todo-demo-note">{children}</p>;
-}
-
-function CoupleCard({ item, expanded, onToggle, onComplete, onEdit }: { item: CoupleItem; expanded: boolean; onToggle: () => void; onComplete: () => void; onEdit: () => void }) {
-  return <article className={`couple-item-card ${expanded ? 'is-expanded' : ''}`}>
-    <div className="couple-card-actions" aria-hidden={!expanded}>
-      <button onClick={onComplete} aria-label={`完成：${item.title}`} tabIndex={expanded ? 0 : -1}><Icon name="check"/></button>
-      <button onClick={onEdit} aria-label={`编辑：${item.title}`} tabIndex={expanded ? 0 : -1}><Icon name="note"/></button>
-    </div>
-    <button className="couple-card-body" aria-expanded={expanded} onClick={onToggle}>
-      <strong>{item.title}</strong><span className="couple-card-tags">{item.tags.map((tag) => <span key={tag}>{tag}</span>)}</span>
-      {item.planned && <span className="couple-card-time"><Icon name="calendar"/>{item.planned}<em>{item.time}</em></span>}
-    </button>
-  </article>;
-}
-
-function CoupleHome({ expandedCard, onExpand, onEdit, selectedTags, onToggleTag, onHistory, onNotice, toggleRef }: {
-  expandedCard: string | null; onExpand: (id: string) => void; onEdit: (id: string) => void; selectedTags: string[]; onToggleTag: (tag: string) => void; onHistory: () => void; onNotice: (text: string) => void; toggleRef?: (button: HTMLButtonElement | null) => void;
+function TodoDialog({ kind, onBack, onNotice, targetDate, onCreatePersonal, onCreateCouple }: {
+  kind: 'todo-add-personal' | 'todo-add-couple'; onBack: () => void; onNotice: (text: string) => void;
+  targetDate: DateKey | null; onCreatePersonal: (title: string, date: DateKey | null) => Promise<void>; onCreateCouple: (title: string) => Promise<void>;
 }) {
-  const planned = coupleItems.filter((item) => item.planned);
-  const unplanned = coupleItems.filter((item) => !item.planned);
-  return <div className="todo-couple-content">
-    <header className="todo-page-header couple-header">
-      <div><p className="todo-kicker">LIFE, TOGETHER</p><h1>我们的小事</h1><p className="todo-subtitle">把想一起做的事，慢慢安排好。</p></div>
-      <div className="couple-header-actions"><button className="todo-history-entry" onClick={onHistory} aria-label="查看已完成历史" title="已完成历史"><Icon name="history"/></button><button ref={toggleRef} className="todo-space-toggle heart-toggle" data-space-toggle="true" type="button" aria-label="返回个人待办" title="返回个人待办"><Icon name="heart"/></button></div>
-    </header>
-    <div className="couple-filter-area"><div className="couple-filter-label"><span>标签</span><span>可多选 · 内容筛选为演示交互</span></div><div className="couple-tags">{allTags.map((tag) => <button key={tag} className={selectedTags.includes(tag) ? 'active' : ''} aria-pressed={selectedTags.includes(tag)} onClick={() => onToggleTag(tag)}>{tag}</button>)}</div></div>
-    <div className="couple-board">
-      <section className="couple-column" aria-label="已安排"><div className="couple-column-title"><span><i className="planned-dot"/>已安排</span><small>{planned.length}</small></div><div className="couple-card-list">{planned.map((item) => <CoupleCard key={item.id} item={item} expanded={expandedCard === item.id} onToggle={() => onExpand(item.id)} onComplete={() => onNotice('完成操作仅为界面演示，暂未写入历史记录。')} onEdit={() => onEdit(item.id)}/>)}</div></section>
-      <section className="couple-column" aria-label="未安排"><div className="couple-column-title"><span><i className="unplanned-dot"/>未安排</span><small>{unplanned.length}</small></div><div className="couple-card-list">{unplanned.map((item) => <CoupleCard key={item.id} item={item} expanded={expandedCard === item.id} onToggle={() => onExpand(item.id)} onComplete={() => onNotice('完成操作仅为界面演示，暂未写入历史记录。')} onEdit={() => onEdit(item.id)}/>)}</div></section>
-    </div>
-    <DemoNotice>示例事项仅用于页面预览；拖动安排、标签筛选与完成历史将在后续阶段接入。</DemoNotice>
-  </div>;
-}
-
-function CoupleHistory({ selectedTags, onToggleTag, range, onRange, onBack }: { selectedTags: string[]; onToggleTag: (tag: string) => void; range: string; onRange: () => void; onBack: () => void }) {
-  return <div className="todo-subpage todo-history-page">
-    <header className="todo-subpage-header"><button className="todo-back-button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">TOGETHER</p><h1>完成的时光</h1></div><button className="todo-range-button" onClick={onRange} aria-label="筛选时间范围"><Icon name="calendar"/><span>{range}</span><Icon name="chevron"/></button></header>
-    <section className="history-filter-section"><div className="couple-filter-label"><span>标签筛选</span><span>仅为交互预览</span></div><div className="couple-tags">{allTags.map((tag) => <button key={tag} className={selectedTags.includes(tag) ? 'active' : ''} aria-pressed={selectedTags.includes(tag)} onClick={() => onToggleTag(tag)}>{tag}</button>)}</div></section>
-    <section className="history-timeline" aria-label="完成时间线">{historySamples.map((entry, index) => <article key={entry.title} className="history-entry"><div className="history-rail"><i/><span className={index === historySamples.length - 1 ? 'last' : ''}/></div><div className="history-entry-content"><time>{entry.completed}</time><h2>{entry.title}</h2><div className="couple-card-tags">{entry.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div></article>)}</section>
-    <DemoNotice>示例时间按完成时刻倒序排列；历史记录与筛选逻辑尚未接入。</DemoNotice>
-  </div>;
-}
-
-function CoupleEditor({ onBack, onSaved }: { onBack: () => void; onSaved: () => void }) {
-  const [tags, setTags] = useState(['约会']);
-  const toggleTag = (tag: string) => setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onSaved(); };
-  return <form className="todo-subpage todo-editor" onSubmit={submit}>
-    <header className="todo-subpage-header"><button type="button" className="todo-back-button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><p className="todo-kicker">LIFE, TOGETHER</p><h1>编辑小事</h1></div><span className="todo-editor-space couple-editor-label">情侣专区</span></header>
-    <label className="todo-form-field"><span>标题</span><input defaultValue="找一家喜欢的日料店" aria-label="事项标题"/></label>
-    <div className="todo-form-grid"><label className="todo-form-field"><span>安排日期</span><input type="date" defaultValue={new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)}/></label><label className="todo-form-field"><span>时间</span><input type="time" defaultValue="18:30"/></label></div>
-    <div className="todo-form-field"><span><Icon name="tag"/>标签 · 可多选</span><div className="todo-editor-tags">{allTags.map((tag) => <button type="button" className={tags.includes(tag) ? 'active' : ''} aria-pressed={tags.includes(tag)} key={tag} onClick={() => toggleTag(tag)}>{tag}</button>)}</div></div>
-    <label className="todo-form-field"><span>备注</span><textarea rows={4} placeholder="补充一点想法"/></label>
-    <p className="todo-form-disclaimer">编辑页演示 · 当前不会保存更改</p><div className="todo-form-actions"><button type="button" className="todo-secondary-button" onClick={onBack}>取消</button><button className="todo-primary-button" type="submit">保存</button></div>
-  </form>;
-}
-
-function TodoDialog({ kind, onBack, onNotice, onRangeChange, range, targetDate, onCreatePersonal }: { kind: 'todo-add-personal' | 'todo-add-couple' | 'history-filter'; onBack: () => void; onNotice: (text: string) => void; onRangeChange: (range: string) => void; range: string; targetDate: DateKey | null; onCreatePersonal: (title: string, date: DateKey | null) => Promise<void> }) {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const quickDialogRef = useRef<HTMLFormElement>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState<DateKey | ''>(targetDate ?? todayKey());
   const [saving, setSaving] = useState(false);
+  const personal = kind === 'todo-add-personal';
 
   useEffect(() => { titleInputRef.current?.focus({ preventScroll: true }); }, []);
   useEffect(() => {
-    if (kind === 'history-filter') return;
     const handleKey = (event: KeyboardEvent) => trapDialogKeyboard(event, quickDialogRef.current, onBack);
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [kind, onBack]);
-  const rangeOptions = ['近 7 天', '近 30 天', '近 90 天', '自定义时间段'];
+  }, [onBack]);
 
-  if (kind === 'history-filter') return <div className="todo-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onBack(); }}><section className="todo-filter-dialog" role="dialog" aria-modal="true" aria-labelledby="range-title">
-    <div className="todo-dialog-heading"><span className="todo-dialog-mark"><Icon name="calendar"/></span><button className="todo-dialog-close" onClick={onBack} aria-label="关闭"><Icon name="close"/></button><p className="todo-kicker">HISTORY FILTER</p><h2 id="range-title">选择时间范围</h2></div>
-    <div className="history-range-options">{rangeOptions.map((option) => <button key={option} className={range === option ? 'active' : ''} aria-pressed={range === option} onClick={() => onRangeChange(option)}><span>{option}</span>{range === option && <Icon name="check"/>}</button>)}</div>
-    {range === '自定义时间段' && <div className="todo-form-grid custom-range"><label className="todo-form-field"><span>开始日期</span><input type="date" aria-label="开始日期"/></label><label className="todo-form-field"><span>结束日期</span><input type="date" aria-label="结束日期"/></label></div>}
-    <div className="todo-dialog-actions"><button className="todo-secondary-button" onClick={onBack}>取消</button><button className="todo-primary-button" onClick={() => { onNotice('时间筛选为界面演示，当前未筛选示例记录。'); onBack(); }}>完成</button></div>
-  </section></div>;
-
-  const personal = kind === 'todo-add-personal';
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!personal) { onNotice('情侣事项仍为 Phase 2A 界面演示，内容不会保存。'); return; }
     const normalized = title.trim();
     if (!normalized || saving) return;
     setSaving(true);
-    void onCreatePersonal(normalized, date ? date as DateKey : null).then(() => {
+    const save = personal ? onCreatePersonal(normalized, date ? date as DateKey : null) : onCreateCouple(normalized);
+    void save.then(() => {
       setTitle('');
       setSaving(false);
       requestAnimationFrame(() => titleInputRef.current?.focus({ preventScroll: true }));
@@ -137,13 +55,25 @@ function TodoDialog({ kind, onBack, onNotice, onRangeChange, range, targetDate, 
       onNotice(error instanceof Error ? error.message : '保存失败，请保留输入后重试。');
     });
   };
-  return <div className={'todo-dialog-backdrop' + (personal ? ' todo-minimal-quick-backdrop' : '')} onMouseDown={(event) => { if (event.target === event.currentTarget) onBack(); }}><form ref={quickDialogRef} className={'todo-quick-dialog' + (personal ? ' todo-minimal-quick-dialog' : '')} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="quick-title-heading">
-    <button type="button" className="todo-dialog-close" onClick={onBack} aria-label="关闭"><Icon name="close"/></button><span className="todo-dialog-mark"><Icon name={personal ? 'plus' : 'heart'}/></span><p className="todo-kicker">{personal ? 'QUICK CAPTURE' : 'LIFE, TOGETHER'}</p><h2 id="quick-title-heading">{personal ? '快速添加' : '记一件我们的小事'}</h2>
-    <label className="todo-form-field"><span>{personal ? '任务内容' : '事项标题'}</span><input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={personal ? '想做什么？' : '想一起做些什么？'} aria-label={personal ? '任务内容' : '事项标题'} maxLength={500} disabled={personal && saving}/></label>
-    {personal ? <label className="todo-form-field"><span>日期</span><input type="date" value={date} onChange={(event) => setDate(event.target.value as DateKey | '')} aria-label="任务日期" disabled={saving}/></label> : <div className="todo-quick-destination"><Icon name="calendar"/><span>默认放入未安排</span></div>}
-    {!personal && <p className="todo-form-disclaimer">情侣事项仍为演示内容，不会落盘。</p>}
-    <div className="todo-dialog-actions"><button type="button" className="todo-secondary-button" onClick={onBack}>关闭</button><button className="todo-primary-button" type="submit" disabled={personal ? !title.trim() || saving : false}>{personal ? (saving ? '添加中…' : '添加') : '添加'}</button></div>
-  </form></div>;
+
+  return <div className={'todo-dialog-backdrop' + (personal ? ' todo-minimal-quick-backdrop' : '')} onMouseDown={(event) => { if (event.target === event.currentTarget) onBack(); }}>
+    <form ref={quickDialogRef} className={'todo-quick-dialog' + (personal ? ' todo-minimal-quick-dialog' : '')} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="quick-title-heading">
+      <button type="button" className="todo-dialog-close" onClick={onBack} aria-label="关闭"><Icon name="close"/></button>
+      <span className="todo-dialog-mark"><Icon name={personal ? 'plus' : 'heart'}/></span>
+      <p className="todo-kicker">{personal ? 'QUICK CAPTURE' : 'LIFE, TOGETHER'}</p>
+      <h2 id="quick-title-heading">{personal ? '快速添加' : '记一件我们的小事'}</h2>
+      <label className="todo-form-field"><span>{personal ? '任务内容' : '事项标题'}</span>
+        <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={personal ? '想做什么？' : '想一起做些什么？'} aria-label={personal ? '任务内容' : '事项标题'} maxLength={500} disabled={saving}/>
+      </label>
+      {personal
+        ? <label className="todo-form-field"><span>日期</span><input type="date" value={date} onChange={(event) => setDate(event.target.value as DateKey | '')} aria-label="任务日期" disabled={saving}/></label>
+        : <div className="todo-quick-destination"><Icon name="calendar"/><span>默认放入未安排</span></div>}
+      {!personal && <p className="todo-form-disclaimer">只保存在此设备；跨设备同步尚未配置。</p>}
+      <div className="todo-dialog-actions"><button type="button" className="todo-secondary-button" onClick={onBack}>关闭</button>
+        <button className="todo-primary-button" type="submit" disabled={!title.trim() || saving}>{saving ? '添加中…' : '添加'}</button>
+      </div>
+    </form>
+  </div>;
 }
 
 function FloatingAdd({ space, onClick }: { space: TodoSpace; onClick: () => void }) {
@@ -163,13 +93,17 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const [undoEntries, setUndoEntries] = useState<UndoEntry[]>([]);
   const undoEntriesRef = useRef(undoEntries);
   const undoTimers = useRef<Map<string, number>>(new Map());
+  const coupleUndoTimer = useRef<number | undefined>(undefined);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification === "undefined" ? "unsupported" : Notification.permission);
   const [reminderRefreshTick, setReminderRefreshTick] = useState(0);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [historyRange, setHistoryRange] = useState("近 30 天");
+  const [selectedCoupleItemId, setSelectedCoupleItemId] = useState<string | null>(null);
+  const [coupleUndoEntry, setCoupleUndoEntry] = useState<CoupleItem | null>(null);
+  const coupleData = useCoupleTodo();
+  const [historyRange, setHistoryRange] = useState<CoupleHistoryRange>(DEFAULT_COUPLE_HISTORY_RANGE);
   const [quickTargetDate, setQuickTargetDate] = useState<DateKey | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskInstance | null>(null);
   const [quickMessage, setQuickMessage] = useState("");
@@ -300,6 +234,7 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
       timers.clear();
       for (const timer of undoTimeouts.values()) window.clearTimeout(timer);
       undoTimeouts.clear();
+      if (coupleUndoTimer.current !== undefined) window.clearTimeout(coupleUndoTimer.current);
     };
   }, []);
 
@@ -442,6 +377,61 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     onNotice(targetDate ? '已添加到 ' + displayDate(targetDate) + '。' : '已添加。');
   };
 
+  const createCoupleQuick = async (title: string) => {
+    await coupleData.createQuick(title);
+    onNotice('已添加到未安排。');
+  };
+  const openCoupleEditor = (id: string) => {
+    setSelectedCoupleItemId(id);
+    setExpandedCard(null);
+    onScreenChange('couple-editor');
+  };
+  const saveCoupleItem = async (draft: CoupleItemDraft) => {
+    await coupleData.save(draft);
+    onNotice('情侣事项已保存到此设备。');
+  };
+  const deleteCoupleItem = async (item: CoupleItem) => {
+    await coupleData.remove(item.id, item.revision);
+    onNotice('情侣事项已删除。');
+  };
+  const createCoupleTag = async (name: string) => coupleData.upsertTag(name);
+  const unplanCoupleItem = async (item: CoupleItem) => {
+    try {
+      await coupleData.save({ id: item.id, expectedRevision: item.revision, title: item.title, scheduledDate: null, scheduledTime: null, tags: item.tags, note: item.note });
+      onNotice('已移回未安排。');
+    } catch (error) { onNotice(error instanceof Error ? error.message : '取消安排失败，请重试。'); }
+  };
+  const scheduleByDrop = async (item: CoupleItem) => {
+    try {
+      await coupleData.save({ id: item.id, expectedRevision: item.revision, title: item.title, scheduledDate: todayKey(), scheduledTime: null, tags: item.tags, note: item.note });
+      onNotice('已安排到今天；可打开事项调整日期和时间。');
+    } catch (error) { onNotice(error instanceof Error ? error.message : '安排失败，请重试。'); }
+  };
+  const completeCoupleItem = async (item: CoupleItem) => {
+    try {
+      const completed = await coupleData.complete(item);
+      setCoupleUndoEntry(completed);
+      if (coupleUndoTimer.current !== undefined) window.clearTimeout(coupleUndoTimer.current);
+      coupleUndoTimer.current = window.setTimeout(() => {
+        setCoupleUndoEntry((current) => current?.id === completed.id ? null : current);
+        coupleUndoTimer.current = undefined;
+      }, 5000);
+    } catch (error) { onNotice(error instanceof Error ? error.message : '完成状态保存失败，请重试。'); }
+  };
+  const undoCoupleCompletion = () => {
+    const item = coupleUndoEntry;
+    if (!item) return;
+    if (coupleUndoTimer.current !== undefined) window.clearTimeout(coupleUndoTimer.current);
+    coupleUndoTimer.current = undefined;
+    setCoupleUndoEntry(null);
+    void coupleData.restore(item).then(() => onNotice('已撤销完成。'))
+      .catch((error: unknown) => onNotice(error instanceof Error ? error.message : '撤销失败，请从历史记录重试。'));
+  };
+  const restoreCoupleHistory = (item: CoupleItem) => {
+    void coupleData.restore(item).then(() => onNotice('已恢复到待办。'))
+      .catch((error: unknown) => onNotice(error instanceof Error ? error.message : '恢复失败，请重试。'));
+  };
+
   const openTaskEditor = (task: TaskInstance, trigger: HTMLElement) => {
     editorTriggerRef.current = trigger;
     setSelectedTask(task);
@@ -490,18 +480,35 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   };
   const captureToggleButton = (button: HTMLButtonElement | null) => { if (button) spaceToggleRef.current = button; };
   const personalHome = <PersonalTodoView {...personalHomeProps} toggleRef={captureToggleButton}/>;
-  const coupleHome = <CoupleHome expandedCard={expandedCard} onExpand={(id) => setExpandedCard((current) => current === id ? null : id)} onEdit={() => onScreenChange("couple-editor")} selectedTags={selectedTags} onToggleTag={(tag) => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])} onHistory={() => onScreenChange("couple-history")} onNotice={onNotice} toggleRef={captureToggleButton}/>;
+  const toggleCoupleTag = (tagId: string) => setSelectedTags((current) => current.includes(tagId) ? current.filter((item) => item !== tagId) : [...current, tagId]);
+  const coupleHomeProps = {
+    items: coupleData.items, tags: coupleData.tags, loading: coupleData.loading, error: coupleData.error,
+    selectedTags, expandedCard, toggleRef: captureToggleButton,
+    onToggleTag: toggleCoupleTag,
+    onExpand: (id: string) => setExpandedCard((current) => current === id ? null : id),
+    onEdit: openCoupleEditor,
+    onComplete: completeCoupleItem,
+    onUnplan: unplanCoupleItem,
+    onHistory: () => onScreenChange('couple-history'),
+    onRetry: () => { void coupleData.retry(); },
+    onDropSchedule: scheduleByDrop
+  };
+  const coupleHome = <CoupleHome {...coupleHomeProps}/>;
+  const couplePreviewProps = { ...coupleHomeProps, items: [], tags: [], loading: false, error: '', selectedTags: [], expandedCard: null, toggleRef: () => undefined, onToggleTag: () => undefined, onExpand: () => undefined, onEdit: () => undefined, onComplete: () => undefined, onUnplan: () => undefined, onHistory: () => undefined, onRetry: () => undefined, onDropSchedule: () => undefined };
+  const coupleEditorItem = coupleData.items.find((item) => item.id === selectedCoupleItemId) ?? null;
   let layout: ReactNode;
-  if (snapshot.todoScreen === "couple-editor") {
-    layout = <CoupleEditor onBack={onBack} onSaved={() => onNotice("情侣事项仍为演示内容，未写入数据。")}/>;
-  } else if (snapshot.todoScreen === "couple-history") {
-    layout = <CoupleHistory selectedTags={selectedTags} onToggleTag={(tag) => setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])} range={historyRange} onRange={() => showSurface("history-filter")} onBack={onBack}/>;
-  } else if (snapshot.todoSpace === "couple") {
+  if (snapshot.todoScreen === 'couple-editor') {
+    layout = <CoupleEditorPage item={coupleEditorItem} missing={selectedCoupleItemId !== null && !coupleEditorItem && !coupleData.loading} tags={coupleData.tags}
+      onBack={() => { setSelectedCoupleItemId(null); onBack(); }} onSave={saveCoupleItem} onDelete={deleteCoupleItem} onCreateTag={createCoupleTag}/>;
+  } else if (snapshot.todoScreen === 'couple-history') {
+    layout = <CoupleHistoryPage items={coupleData.items} tags={coupleData.tags} selectedTags={selectedTags} range={historyRange}
+      onToggleTag={toggleCoupleTag} onRange={() => showSurface('history-filter')} onBack={onBack} onRestore={restoreCoupleHistory}/>;
+  } else if (snapshot.todoSpace === 'couple') {
     layout = coupleHome;
   } else {
     layout = personalHome;
   }
-  const dialogKind = showQuickAdd ? currentOverlay as "todo-add-personal" | "todo-add-couple" : showRangeDialog ? "history-filter" : null;
+  const dialogKind = showQuickAdd ? currentOverlay as 'todo-add-personal' | 'todo-add-couple' : null;
   const closeTaskEditor = () => { setSelectedTask(null); onBack(); };
   const personalEditorOverlay = active && isPersonalEditor && selectedTask && selectedBase ? createPortal(<MinimalTaskEditor
     task={selectedTask}
@@ -520,12 +527,12 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     style={{ left: ripple.left, top: ripple.top, width: ripple.width, height: ripple.height, "--ripple-x": ripple.x + "px", "--ripple-y": ripple.y + "px", "--ripple-radius": ripple.radius + "px" } as CSSProperties}
     onAnimationEnd={(event) => { if (event.target === event.currentTarget) finishRipple(ripple.target); }}>
     <div className="todo-ripple-content"><div className={"todo-module-page todo-page-" + ripple.target}>
-      {ripple.target === "personal" ? <PersonalTodoView {...personalHomeProps}/> : <CoupleHome expandedCard={expandedCard} onExpand={() => undefined} onEdit={() => undefined} selectedTags={selectedTags} onToggleTag={() => undefined} onHistory={() => undefined} onNotice={() => undefined}/>}
+      {ripple.target === "personal" ? <PersonalTodoView {...personalHomeProps}/> : <CoupleHome {...couplePreviewProps}/> }
     </div>{ripple.target === "personal" ? <div className="todo-minimal-fab todo-preview-fab" aria-hidden="true"><Icon name="plus"/></div> : <div className="todo-fab todo-fab-couple todo-preview-fab" aria-hidden="true"><Icon name="plus"/><span>加一件小事</span></div>}</div>
   </div>;
 
   return <>
-    <div ref={rootRef} className="todo-module-root" data-current-space={snapshot.todoSpace} data-loading={dataLoading ? "true" : "false"} aria-busy={rippleBusy.current} aria-hidden={isPersonalEditor || showQuickAdd || undefined} inert={!!ripple || isPersonalEditor || showQuickAdd} onClick={isHomeScreen ? handleRootToggle : undefined}>
+    <div ref={rootRef} className="todo-module-root" data-current-space={snapshot.todoSpace} data-loading={dataLoading ? "true" : "false"} aria-busy={rippleBusy.current} aria-hidden={isPersonalEditor || showQuickAdd || showRangeDialog || undefined} inert={!!ripple || isPersonalEditor || showQuickAdd || showRangeDialog} onClick={isHomeScreen ? handleRootToggle : undefined}>
       <section className={"todo-module-page todo-page-" + snapshot.todoSpace} aria-label={snapshot.todoSpace === "personal" ? "待办" : "我们的小事"}>
         {dataError && snapshot.todoSpace === "personal" && <p className="todo-data-error" role="alert">{dataError} 请检查存储空间后重试。 <button type="button" onClick={() => { setDataLoading(true); void refreshData().catch((error: unknown) => { setDataLoading(false); setDataError(error instanceof Error ? error.message : "读取失败。"); }); }}>重试</button></p>}
         {layout}
@@ -533,8 +540,12 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     </div>
     {preview && createPortal(preview, document.body)}
     {personalEditorOverlay}
-    {active && isHomeScreen && !dialogKind && !ripple && snapshot.todoSpace === "couple" && <FloatingAdd space="couple" onClick={() => showSurface("todo-add-couple")}/>}
-    {active && dialogKind && <TodoDialog kind={dialogKind} onBack={onBack} onNotice={onNotice} onRangeChange={setHistoryRange} range={historyRange} targetDate={quickTargetDate} onCreatePersonal={createPersonalTask}/>}
+    {active && isHomeScreen && !dialogKind && !showRangeDialog && !ripple && snapshot.todoSpace === "couple" && <FloatingAdd space="couple" onClick={() => showSurface("todo-add-couple")}/>}
+    {active && dialogKind && <TodoDialog kind={dialogKind} onBack={onBack} onNotice={onNotice} targetDate={quickTargetDate} onCreatePersonal={createPersonalTask} onCreateCouple={createCoupleQuick}/>}
+    {active && showRangeDialog && snapshot.todoScreen === 'couple-history' && <CoupleHistoryFilterDialog range={historyRange} onBack={onBack} onApply={setHistoryRange}/>}
+    {active && isHomeScreen && !ripple && snapshot.todoSpace === 'couple' && coupleUndoEntry && <div className="todo-undo-toast" role="status" aria-live="polite">
+      <span>已完成「{coupleUndoEntry.title}」</span><button type="button" aria-label={`撤销完成：${coupleUndoEntry.title}`} onClick={undoCoupleCompletion}>撤销</button>
+    </div>}
     {active && isHomeScreen && snapshot.todoSpace === 'personal' && undoEntries.at(-1) && <div className="todo-undo-toast" role="status" aria-live="polite">
       <span>已完成「{undoEntries.at(-1)!.task.title}」</span>
       <button type="button" aria-label={'撤销完成：' + undoEntries.at(-1)!.task.title} onClick={() => undoCompletion(undoEntries.at(-1)!.id)}>撤销</button>

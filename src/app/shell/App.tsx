@@ -40,7 +40,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     document.addEventListener('keydown', handleKey);
     return () => { document.removeEventListener('keydown', handleKey); previous?.focus(); };
   }, [onClose]);
-  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="dialog" ref={ref} role="dialog" aria-modal="true" aria-labelledby="about-title"><button className="icon-button close" onClick={onClose} aria-label="关闭"><Icon name="close"/></button><span className="brand-mark"><Icon name="spark"/></span><p className="eyebrow">DEVELOPMENT PREVIEW</p><h2 id="about-title">Life Space</h2><p>开发测试版 0.1.0</p><p className="muted">当前版本包含个人待办，数据保存在本机；情侣专区仍为交互演示。显示名称与正式 Android 包名尚未确定。</p><button className="primary-button" onClick={onClose}>知道了</button></div></div>;
+  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="dialog" ref={ref} role="dialog" aria-modal="true" aria-labelledby="about-title"><button className="icon-button close" onClick={onClose} aria-label="关闭"><Icon name="close"/></button><span className="brand-mark"><Icon name="spark"/></span><p className="eyebrow">DEVELOPMENT PREVIEW</p><h2 id="about-title">Life Space</h2><p>开发测试版 0.1.0</p><p className="muted">个人与情侣待办均保存在本机；跨设备同步尚未配置。显示名称与正式 Android 包名尚未确定。</p><button className="primary-button" onClick={onClose}>知道了</button></div></div>;
 }
 
 function ReadyApp({ startModule, onError }: { startModule: ModuleId; onError: (message: string) => void }) {
