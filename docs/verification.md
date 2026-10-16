@@ -1,4 +1,23 @@
-# Phase 2B 网页验证记录
+# Life Space 网页验证记录
+
+## Phase 2C 手机交互与视觉验收修复（2026-10-16）
+
+- 分支：`feat/todo-phase-2c`。实现提交：`d3bdf864efa8f8198c53cc02f4d255d09b620177`，推送到现有 Draft PR #5。
+- `npm run typecheck`、`npm run lint`、`npm test -- --run`（9 个测试文件、58 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机 Edge/Chromium 桌面及触控浏览器检查通过。覆盖快速连续新增、详细新增字段与新标签保存、模式切换保留标题、标签 OR 筛选和计数、卡片点击/键盘、鼠标拖动阈值、有效/无效拖放、安排时间清空与刷新持久化。
+- 移动浏览器验证覆盖轻点展开、短距离上下滑动、长按拖动、个人与情侣数据/状态保留，以及 320、360、390、430px 视口的横向溢出、卡片和标签可读性；320px 系统文字放大场景通过。缩短视口验证详细表单可滚动且安全区底部留白有效。减少动态效果模式和连续切换、两种空间切换按钮位置/尺寸也通过。
+- 浏览器截图保存在忽略目录 `.artifacts/browser-preview`，不纳入提交。未在真实 Android 设备上验证系统键盘弹出后的可视区域、硬件/系统返回键以及真机触摸手感；需在手机上做最终人工验收。
+- 沿用 IndexedDB v4，未清空或迁移个人/情侣数据；未改 Period、Anniversary、设置或 Supabase schema。情侣数据仍仅在本机保存。
+
+## Phase 2C 情侣待办验证（2026-10-16）
+
+- 基线核验：当前分支 `feat/todo-phase-2c` 的 HEAD 为 `e5f011a35bcfcccf2e7dd9ec5a78fb4b9fa91c40`；`git merge-base --is-ancestor` 确认该 Phase 2B 基线已包含在当前分支。
+- `npm test -- --run`：通过，9 个测试文件、58 项。
+- `npm run typecheck`、`npm run lint`、`npm test -- --run`、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机生产预览验证通过，使用 Microsoft Edge（Chromium）。桌面检查覆盖情侣事项新增/编辑/删除、安排与未安排拖动、日期时间保存、多标签 OR、完成/撤销、历史范围筛选/恢复，以及个人待办数据和 Period、Anniversary、设置导航保留。
+- 移动触控上下文覆盖 390×844，以及 320、360、390、430px 宽度；情侣和个人待办均无横向溢出，并检查情侣快速新增、完成与撤销。PWA scope、manifest 和 Service Worker 控制状态均与本机预览 URL 匹配。
+- 浏览器截图保存在忽略目录 `.artifacts/browser-preview`，不纳入提交。
+- Supabase 迁移只完成源码审阅；当前环境没有 PostgreSQL、Docker 或 Supabase CLI，因此没有在数据库实例中解析或执行。该迁移尚未应用，应用也没有账号、配对或远程 repository；跨设备同步未启用。
 
 ## Todo 极简重构（2026-10-16）
 

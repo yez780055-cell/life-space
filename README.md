@@ -14,7 +14,13 @@ Life Space 是 React 19、TypeScript、Vite 和 Capacitor 7 构建的个人生�
 
 重复任务使用一条系列规则按本地日期计算实例，不复制未来任务行。全部视图保留已有周期记录，并为每条仍有效的重复系列显示从今天开始的下一个未记录周期，以保持列表有限。提醒设置会持久化；只有用户主动授权后，网页打开时才会尝试通过浏览器通知提醒。浏览器关闭后的可靠投递、原生通知和跨设备同步尚未实现。
 
-情侣看板仍是 Phase 2A 的交互演示数据；情侣事项、标签筛选和完成历史没有持久化。Period 与 Anniversary 保持原样。
+## Phase 2C：情侣待办
+
+情侣事项与标签保存在独立的 IndexedDB stores 中，不改写个人任务记录。当前支持快速新增、编辑、确认删除、安排/未安排两列拖动、日期时间编辑、多标签 OR 筛选、完成与撤销、可恢复的完成历史及 7/30/90/180/365 天和自定义范围筛选。完成时间按本机时区显示。
+
+目前数据仅保存在当前设备，跨设备同步未配置、未启用。`supabase/migrations/202610160001_couple_todo.sql` 和 `CoupleTodoRepository` 接口为后续认证共享准备了成员上限、一次性邀请、RLS 与版本冲突控制；应用没有 Supabase 项目 URL 或客户端密钥，也没有远程同步适配器。不得将本机保存状态描述为同步。
+
+情侣数据使用独立的 `coupleItems`、`coupleTags` stores；升级会保留现有 `todoTasks`、`todoTags`、`todoOccurrences`。Period、Anniversary 与个人待办继续使用原有模块和数据路径。
 
 ## 预览与部署
 
@@ -28,4 +34,4 @@ GitHub Pages 使用 Vite 的 `/life-space/` 子路径。Playwright 检查该子�
 
 ## 范围
 
-Phase 2B 不包含后端、账号、同步、可靠后台提醒或 Android APK。情侣事项的真实 CRUD、拖拽安排、筛选与历史数据属于 Phase 2C；Android 真机验收和正式发布另行安排。
+Phase 2C 不包含已连接的后端、账号流程、跨设备同步、可靠后台提醒或 Android APK。Android 真机验收和正式发布另行安排。
