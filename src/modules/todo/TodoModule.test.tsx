@@ -116,7 +116,7 @@ describe('minimal personal Todo', () => {
     await waitFor(async () => expect(await todoRepository.listTasks()).toHaveLength(1));
     expect((await todoRepository.listTasks())[0]).toMatchObject({ title: '浇花', scheduledDate: selected });
     expect(screen.getByRole('dialog', { name: '快速添加' })).toBeTruthy();
-    expect((screen.getByRole('textbox', { name: '任务内容' }) as HTMLInputElement).value).toBe('');
+    await waitFor(() => expect((screen.getByRole('textbox', { name: '任务内容' }) as HTMLInputElement).value).toBe(''));
 
     fireEvent.change(screen.getByRole('textbox', { name: '任务内容' }), { target: { value: '收衣服' } });
     fireEvent.click(screen.getByRole('button', { name: '添加' }));
