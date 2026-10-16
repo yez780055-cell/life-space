@@ -1,5 +1,5 @@
-import { addDays, fromDateKey, startOfWeek } from './dates';
-import type { DateKey, PersonalTask, TaskInstance, TaskOccurrence } from './model';
+import { addDays, fromDateKey, startOfWeek, toDateKey } from './dates';
+import type { DateKey, PersonalTask, RecurrenceRule, TaskInstance, TaskOccurrence } from './model';
 import { occurrenceKey } from './model';
 
 function monthDistance(a: DateKey, b: DateKey) {
@@ -10,6 +10,10 @@ function monthDistance(a: DateKey, b: DateKey) {
 function calendarDayDistance(a: DateKey, b: DateKey) {
   const [ay, am, ad] = a.split('-').map(Number), [by, bm, bd] = b.split('-').map(Number);
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000);
+}
+
+function isDateKey(key: DateKey) {
+  return !Number.isNaN(fromDateKey(key).getTime());
 }
 
 export function occursOn(task: PersonalTask, date: DateKey): boolean {
@@ -27,6 +31,60 @@ export function occursOn(task: PersonalTask, date: DateKey): boolean {
   const months = monthDistance(rule.startsOn, date);
   // Monthly dates that do not exist (for example the 31st in April) are skipped.
   return months >= 0 && months % rule.interval === 0 && candidate.getDate() === start.getDate();
+}
+
+/** Return the first valid cycle on or after a date without scanning every day. */
+export function nextOccurrenceDate(rule: RecurrenceRule, from: DateKey): DateKey | null {
+  if (!Number.isSafeInteger(rule.interval) || rule.interval < 1) return null;
+  const first = from < rule.startsOn ? rule.startsOn : from;
+  if (rule.endsOn && first > rule.endsOn) return null;
+
+  if (rule.frequency === 'daily') {
+    const days = calendarDayDistance(rule.startsOn, first);
+    const steps = Math.ceil(Math.max(0, days) / rule.interval);
+    const candidate = addDays(rule.startsOn, steps * rule.interval);
+    return isDateKey(candidate) && candidate >= first && (!rule.endsOn || candidate <= rule.endsOn) ? candidate : null;
+  }
+
+  if (rule.frequency === 'weekly') {
+    const weekdays = [...new Set(rule.weekdays)].filter((day) => day >= 0 && day <= 6).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+    if (weekdays.length === 0) return null;
+    const firstWeek = startOfWeek(rule.startsOn);
+    const candidateWeek = startOfWeek(first);
+    const weeksFromStart = Math.floor(calendarDayDistance(firstWeek, candidateWeek) / 7);
+    let intervalWeek = Math.ceil(Math.max(0, weeksFromStart) / rule.interval) * rule.interval;
+
+    while (Number.isSafeInteger(intervalWeek)) {
+      const weekStart = addDays(firstWeek, intervalWeek * 7);
+      if (!isDateKey(weekStart) || (rule.endsOn && weekStart > rule.endsOn)) return null;
+      for (const weekday of weekdays) {
+        // Convert JavaScript's Sunday-first weekday to a Monday-first offset.
+        const candidate = addDays(weekStart, (weekday + 6) % 7);
+        if (isDateKey(candidate) && candidate >= first && candidate >= rule.startsOn && (!rule.endsOn || candidate <= rule.endsOn)) return candidate;
+      }
+      intervalWeek += rule.interval;
+    }
+    return null;
+  }
+
+  const start = fromDateKey(rule.startsOn);
+  const monthOffset = monthDistance(rule.startsOn, first);
+  let intervalMonth = Math.ceil(Math.max(0, monthOffset) / rule.interval) * rule.interval;
+  while (Number.isSafeInteger(intervalMonth)) {
+    const absoluteMonth = start.getFullYear() * 12 + start.getMonth() + intervalMonth;
+    const year = Math.floor(absoluteMonth / 12);
+    const month = absoluteMonth % 12;
+    const monthStart = new Date(year, month, 1);
+    if (Number.isNaN(monthStart.getTime())) return null;
+    const day = start.getDate();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    if (day <= lastDay) {
+      const candidate = toDateKey(new Date(year, month, day));
+      if (isDateKey(candidate) && candidate >= first && (!rule.endsOn || candidate <= rule.endsOn)) return candidate;
+    }
+    intervalMonth += rule.interval;
+  }
+  return null;
 }
 
 function makeInstance(task: PersonalTask, periodDate: DateKey | null, occurrence?: TaskOccurrence): TaskInstance {
@@ -95,6 +153,40 @@ export function occurrencesInRange(tasks: PersonalTask[], occurrences: TaskOccur
     instances.set(instance.instanceKey, instance);
   }
   return [...instances.values()].sort((a, b) => (a.scheduledDate ?? '').localeCompare(b.scheduledDate ?? '') || (a.scheduledTime ?? '').localeCompare(b.scheduledTime ?? '') || a.createdAt - b.createdAt);
+}
+
+/**
+ * Build a finite all-tasks view. One-off records and explicitly stored cycles
+ * are shown as-is. An unrecorded recurring series contributes only its next
+ * upcoming cycle, so an open-ended rule cannot expand without bound.
+ */
+export function allInstances(tasks: PersonalTask[], occurrences: TaskOccurrence[], from: DateKey): TaskInstance[] {
+  const occurrenceMap = new Map(occurrences.map((occurrence) => [occurrence.key, occurrence]));
+  const occurrencesByTask = new Map<string, TaskOccurrence[]>();
+  for (const occurrence of occurrences) {
+    occurrencesByTask.set(occurrence.taskId, [...(occurrencesByTask.get(occurrence.taskId) ?? []), occurrence]);
+  }
+
+  const instances = new Map<string, TaskInstance>();
+  for (const task of tasks) {
+    const rules = [...task.recurrenceHistory, ...(task.recurrence ? [task.recurrence] : [])];
+    if (!task.recurrence) instances.set(task.id, makeInstance(task, null));
+
+    if (task.seriesId === null || rules.length === 0) continue;
+    for (const occurrence of occurrencesByTask.get(task.id) ?? []) {
+      if (occurrence.skipped || !rules.some((rule) => occursOn({ ...task, recurrence: rule }, occurrence.periodDate))) continue;
+      instances.set(occurrence.key, makeInstance(task, occurrence.periodDate, occurrence));
+    }
+
+    if (!task.recurrence) continue;
+    let candidate = nextOccurrenceDate(task.recurrence, from);
+    while (candidate && occurrenceMap.has(occurrenceKey(task.id, candidate))) {
+      candidate = nextOccurrenceDate(task.recurrence, addDays(candidate, 1));
+    }
+    if (candidate) instances.set(occurrenceKey(task.id, candidate), makeInstance(task, candidate));
+  }
+
+  return [...instances.values()].sort((a, b) => (a.scheduledDate ?? '').localeCompare(b.scheduledDate ?? '') || a.createdAt - b.createdAt);
 }
 
 export function recurrenceDates(task: PersonalTask, from: DateKey, through: DateKey): DateKey[] {

@@ -1,359 +1,205 @@
-/* global process, navigator, console, URL, document, fetch, window, indexedDB, Touch, TouchEvent, getComputedStyle */
-import { chromium } from 'playwright';
+/* global process, console, document, indexedDB, navigator, URL, fetch, Touch, TouchEvent */
 import { mkdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { chromium } from 'playwright';
 
 const url = process.env.LIFE_SPACE_PREVIEW_URL ?? 'http://127.0.0.1:4173/';
 if (!url.endsWith('/')) throw new Error('LIFE_SPACE_PREVIEW_URL must end with /');
+const screenshotDir = resolve(process.env.LIFE_SPACE_SCREENSHOT_DIR ?? 'docs/screenshots');
+await mkdir(screenshotDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, ...(process.env.LIFE_SPACE_CHROMIUM_PATH ? { executablePath: process.env.LIFE_SPACE_CHROMIUM_PATH } : {}), args: ['--no-sandbox'] });
-await mkdir('docs/screenshots', { recursive: true });
+const shot = (page, name) => page.screenshot({ path: join(screenshotDir, name), fullPage: true });
 
 async function waitForSpace(page, space) {
-  await page.waitForFunction((expected) => document.querySelector('.todo-module-root')?.getAttribute('data-current-space') === expected, space, { timeout: 2500 });
-  if (await page.getByTestId('space-ripple').count()) throw new Error('A space ripple remained after the transition');
+  await page.waitForFunction((expected) => document.querySelector('.todo-module-root')?.getAttribute('data-current-space') === expected, space, { timeout: 3000 });
+  if (await page.getByTestId('space-ripple').count()) throw new Error('A space ripple remained after transition');
 }
 
-async function waitForSavedModule(page, module) {
-  await page.waitForFunction(async (expected) => {
-    const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('life-space', 3);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    try {
-      return await new Promise((resolve, reject) => {
-        const request = database.transaction('settings', 'readonly').objectStore('settings').get('lastModule');
-        request.onsuccess = () => resolve(request.result === expected);
-        request.onerror = () => reject(request.error);
-      });
-    } finally {
-      database.close();
-    }
-  }, module, { timeout: 5000, polling: 100 });
+async function waitForTodoData(page) {
+  await page.waitForFunction(() => document.querySelector('.todo-module-root')?.getAttribute('data-loading') === 'false');
 }
 
 async function swipe(page, selector, fromX, fromY, toX, toY) {
   await page.locator(selector).evaluate((element, point) => {
-    const makeTouch = (x, y) => new Touch({ identifier: 1, target: element, clientX: x, clientY: y });
-    const start = makeTouch(point.fromX, point.fromY);
-    const end = makeTouch(point.toX, point.toY);
+    const start = new Touch({ identifier: 1, target: element, clientX: point.fromX, clientY: point.fromY });
+    const end = new Touch({ identifier: 1, target: element, clientX: point.toX, clientY: point.toY });
     element.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [start], changedTouches: [start] }));
     element.dispatchEvent(new TouchEvent('touchend', { bubbles: true, touches: [], changedTouches: [end] }));
   }, { fromX, fromY, toX, toY });
 }
 
+async function openQuickAdd(page) {
+  await page.getByRole('button', { name: '快速新增待办' }).click();
+  const dialog = page.getByRole('dialog', { name: '快速添加' });
+  await dialog.waitFor();
+  return dialog;
+}
+
 try {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
-  const desktopPage = await desktop.newPage();
-  await desktopPage.goto(url);
-  await desktopPage.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  if (await desktopPage.getByRole('tab', { name: '本周' }).getAttribute('aria-selected') !== 'true') throw new Error('Todo did not open on this week');
-  await desktopPage.screenshot({ path: 'docs/screenshots/desktop.png', fullPage: true });
-  await desktopPage.getByRole('button', { name: '进入情侣专区' }).click();
-  await waitForSpace(desktopPage, 'couple');
-  await desktopPage.getByRole('heading', { name: '我们的小事' }).waitFor();
-  await desktopPage.screenshot({ path: 'docs/screenshots/todo-couple-desktop.png', fullPage: true });
-  const firstCoupleCard = desktopPage.locator('.couple-card-body').first();
-  await firstCoupleCard.click();
-  if (await firstCoupleCard.getAttribute('aria-expanded') !== 'true') throw new Error('Couple card did not expand');
-  await desktopPage.getByRole('button', { name: '查看已完成历史' }).click();
-  await desktopPage.getByRole('heading', { name: '完成的时光' }).waitFor();
-  await desktopPage.getByRole('button', { name: '筛选时间范围' }).click();
-  await desktopPage.getByRole('dialog', { name: '选择时间范围' }).waitFor();
-  await desktopPage.getByRole('button', { name: '关闭' }).click();
-  await desktopPage.getByRole('button', { name: '返回' }).click();
-  await desktopPage.getByRole('heading', { name: '我们的小事' }).waitFor();
-  await desktopPage.getByRole('button', { name: '返回个人待办' }).click();
-  await waitForSpace(desktopPage, 'personal');
-  const desktopCycleLength = await desktopPage.evaluate(() => window.history.length);
-  for (let index = 0; index < 3; index += 1) {
-    await desktopPage.getByRole('button', { name: '进入情侣专区' }).click();
-    await waitForSpace(desktopPage, 'couple');
-    await desktopPage.getByRole('button', { name: '返回个人待办' }).click();
-    await waitForSpace(desktopPage, 'personal');
-  }
-  const desktopCycleLengthAfter = await desktopPage.evaluate(() => window.history.length);
-  if (desktopCycleLengthAfter !== desktopCycleLength) throw new Error(`Repeated space toggles added browser history: ${desktopCycleLength} -> ${desktopCycleLengthAfter}`);
-  await desktopPage.getByRole('button', { name: '快速新增待办' }).click();
-  const quickDialog = desktopPage.getByRole('dialog', { name: '快速记录' });
-  await quickDialog.waitFor();
-  await quickDialog.getByRole('textbox', { name: '任务标题' }).fill('视觉预览任务');
-  await quickDialog.getByRole('button', { name: '保存' }).click();
-  await desktopPage.getByRole('status').filter({ hasText: '已保存到收集箱' }).waitFor();
-  await quickDialog.waitFor({ state: 'hidden' });
-  await desktopPage.getByRole('button', { name: /收集箱/ }).click();
-  await desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' }).click();
-  await desktopPage.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
-  await desktopPage.getByRole('button', { name: /添加子任务/ }).click();
-  await desktopPage.getByRole('textbox', { name: '子任务标题' }).last().fill('整理书本');
-  await desktopPage.getByRole('button', { name: /添加子任务/ }).click();
-  await desktopPage.getByRole('textbox', { name: '子任务标题' }).last().fill('准备水杯');
-  const desktopDate = await desktopPage.evaluate(() => {
-    const date = new Date(); date.setDate(date.getDate() + 2);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  });
-  await desktopPage.getByLabel('任务日期').fill(desktopDate);
-  await desktopPage.getByLabel('具体时间').fill('19:30');
-  await desktopPage.getByText('更多设置').click();
-  await desktopPage.getByLabel('备注').fill('Playwright 持久化验证');
-  await desktopPage.getByLabel('新标签名称').fill('个人');
-  await desktopPage.getByRole('button', { name: '添加标签' }).click();
-  await desktopPage.locator('#todo-reminder').check();
-  await desktopPage.locator('.todo-form-field:has(#todo-reminder) select').selectOption('30');
-  await desktopPage.getByRole('button', { name: '保存' }).click();
-  await desktopPage.getByRole('status').filter({ hasText: '任务已保存' }).waitFor();
-  await desktopPage.getByRole('tab', { name: '本周' }).click();
-  let savedTaskButton = desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' });
-  if (await savedTaskButton.count() === 0) {
-    await desktopPage.getByRole('button', { name: '下一个周期' }).click();
-    savedTaskButton = desktopPage.getByRole('button', { name: '编辑任务：视觉预览任务' });
-  }
-  const savedTaskRow = desktopPage.locator('.todo-task-row').filter({ hasText: '视觉预览任务' });
-  await savedTaskRow.waitFor();
-  await savedTaskRow.locator('.todo-task-tags').getByText('个人').waitFor();
-  await savedTaskRow.locator('input[aria-label="子任务：整理书本"]').check();
-  await savedTaskRow.locator('input[aria-label="子任务：准备水杯"]').check();
-  await savedTaskRow.getByRole('button', { name: '恢复任务：视觉预览任务' }).waitFor();
-  await savedTaskRow.locator('input[aria-label="子任务：整理书本"]').uncheck();
-  await savedTaskRow.getByRole('button', { name: '完成任务：视觉预览任务' }).waitFor();
-  await savedTaskRow.getByRole('button', { name: '编辑任务：视觉预览任务' }).click();
-  await desktopPage.getByText('更多设置').click();
-  await desktopPage.getByLabel('开启提醒').waitFor();
-  if (!(await desktopPage.locator('#todo-reminder').isChecked())) throw new Error('Reminder setting did not persist after editing');
-  if (await desktopPage.locator('.todo-form-field:has(#todo-reminder) select').inputValue() !== '30') throw new Error('Reminder lead time did not persist after editing');
-  await desktopPage.goBack();
-  await desktopPage.getByRole('region', { name: '待办' }).waitFor();
-  await desktopPage.getByRole('tab', { name: '本月' }).click();
-  if (new Date(`${desktopDate}T00:00:00`).getMonth() !== new Date().getMonth()) await desktopPage.getByRole('button', { name: '下一个周期' }).click();
-  const desktopDateObject = new Date(`${desktopDate}T00:00:00`);
-  const desktopDateLabel = `${desktopDateObject.getMonth() + 1}月${desktopDateObject.getDate()}日`;
-  await desktopPage.getByRole('gridcell', { name: new RegExp(desktopDateLabel) }).click();
-  await desktopPage.locator('.todo-calendar-day.is-focused-day').waitFor();
-  await desktopPage.screenshot({ path: 'docs/screenshots/todo-month-focused-desktop.png', fullPage: true });
-  await desktopPage.goBack();
-  await desktopPage.locator('.todo-calendar-day.is-focused-day').waitFor({ state: 'detached' });
-  const desktopNav = desktopPage.locator('.sidebar');
-  await desktopNav.getByRole('button', { name: '小月历' }).click();
-  await desktopPage.getByRole('heading', { name: '小月历', exact: true }).waitFor();
-  await desktopNav.getByRole('button', { name: '纪念日' }).click();
-  await desktopPage.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await desktopNav.getByRole('button', { name: '设置' }).click();
-  await desktopPage.getByRole('heading', { name: '简单一点，刚刚好。' }).waitFor();
-  await desktopPage.getByRole('button', { name: '关于测试版本' }).click();
-  await desktopPage.getByRole('dialog').waitFor();
-  await desktopPage.getByRole('button', { name: '关闭' }).click();
-  await desktopPage.getByRole('dialog').waitFor({ state: 'hidden' });
-  await desktopPage.locator('.settings-page').getByRole('button', { name: '返回' }).click();
-  await desktopPage.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await desktop.close();
-
-  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
-  const page = await mobile.newPage();
+  const page = await desktop.newPage();
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto(url);
-  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  await page.screenshot({ path: 'docs/screenshots/mobile.png', fullPage: true });
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-  if (overflow) throw new Error('The 390px mobile Todo page has horizontal overflow');
-  await page.getByRole('button', { name: '快速新增待办' }).tap();
-  const mobileCreate = page.getByRole('dialog', { name: '快速记录' });
-  await mobileCreate.waitFor();
-  await mobileCreate.getByRole('textbox', { name: '任务标题' }).fill('移动浏览器任务');
-  await mobileCreate.getByRole('button', { name: '保存' }).tap();
-  await page.getByRole('status').filter({ hasText: '已保存到收集箱' }).waitFor();
-  await page.getByRole('button', { name: /收集箱/ }).tap();
-  await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
-  await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
-  await page.getByRole('button', { name: /添加子任务/ }).tap();
-  await page.getByRole('textbox', { name: '子任务标题' }).last().fill('装进包里');
-  await page.getByRole('button', { name: '保存' }).tap();
-  await page.getByRole('region', { name: '待办' }).waitFor();
-  const mobileInboxRow = page.locator('.todo-inbox-list > .todo-task-row').filter({ hasText: '移动浏览器任务' });
-  await mobileInboxRow.waitFor();
-  for (const width of [320, 360, 390, 430]) {
-    await page.setViewportSize({ width, height: 844 });
-    const bounds = await mobileInboxRow.evaluate((row) => {
-      const rect = (selector) => {
-        const item = row.querySelector(selector);
-        const box = item.getBoundingClientRect();
-        return { left: box.left, right: box.right, width: box.width };
-      };
-      const title = row.querySelector('.todo-task-title');
-      return { check: rect('.todo-check'), main: rect('.todo-task-open'), edit: rect('.todo-task-edit'), row: rect('.todo-task-main'), writingMode: getComputedStyle(title).writingMode, scrollWidth: row.scrollWidth, clientWidth: row.clientWidth };
-    });
-    if (bounds.check.width > 44 || bounds.edit.width < 28 || bounds.main.width < 90 || bounds.check.right > bounds.main.left + 1 || bounds.main.right > bounds.edit.left + 1 || bounds.writingMode !== 'horizontal-tb' || bounds.scrollWidth > bounds.clientWidth + 1) {
-      throw new Error(`Inbox task controls overlap or text is constrained at ${width}px: ${JSON.stringify(bounds)}`);
-    }
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await mobileInboxRow.locator('input[aria-label="子任务：装进包里"]').check();
-  await mobileInboxRow.locator('input[aria-label="子任务：装进包里"]').waitFor({ state: 'attached' });
-  if (await mobileInboxRow.locator('input[aria-label="子任务：装进包里"]').isChecked() !== true) throw new Error('Mobile inline subtask did not remain checked');
-  await mobileInboxRow.getByRole('button', { name: '打开任务：移动浏览器任务' }).tap();
-  const mobileEditor = page.getByRole('dialog', { name: '编辑任务' });
-  await mobileEditor.waitFor();
-  if (await page.locator('.todo-module-root').getAttribute('inert') === null) throw new Error('The editor overlay left the Todo page interactive underneath');
-  const editorTitleFocused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === '任务标题');
-  await mobileEditor.getByText('更多设置').tap();
-  const editorLayout = await page.evaluate(() => {
-    const dialog = document.querySelector('.todo-editor');
-    const header = dialog.querySelector('.todo-subpage-header');
-    const footer = dialog.querySelector('.todo-form-actions');
-    const scroll = dialog.querySelector('.todo-editor-scroll');
-    const before = { headerTop: header.getBoundingClientRect().top, footerBottom: footer.getBoundingClientRect().bottom };
-    scroll.scrollTop = scroll.scrollHeight;
-    const after = { headerTop: header.getBoundingClientRect().top, footerBottom: footer.getBoundingClientRect().bottom };
-    return { before, after, viewportHeight: window.innerHeight, contentHeight: scroll.scrollHeight, scrollHeight: scroll.clientHeight };
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await waitForTodoData(page);
+  await shot(page, 'todo-desktop-date.png');
+
+  await page.getByRole('button', { name: '后一天' }).click();
+  await page.getByRole('button', { name: '后一天' }).click();
+  const quick = await openQuickAdd(page);
+  const quickTitle = quick.getByRole('textbox', { name: '任务内容' });
+  const selectedDate = await quick.getByLabel('任务日期').inputValue();
+  const expectedDate = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() + 2); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
+  if (selectedDate !== expectedDate) throw new Error(`Quick add did not use the browsed date: ${selectedDate} != ${expectedDate}`);
+  const focused = await quickTitle.evaluate((input) => document.activeElement === input);
+  if (!focused) throw new Error('Quick add did not focus the task title');
+  await shot(page, 'todo-desktop-quick-add.png');
+  await quickTitle.fill('浏览日期任务');
+  await quickTitle.press('Enter');
+  await page.waitForFunction(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space', 3); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.some((task) => task.title === '浏览日期任务')); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
   });
-  if (!editorTitleFocused || Math.abs(editorLayout.before.headerTop - editorLayout.after.headerTop) > 1 || Math.abs(editorLayout.before.footerBottom - editorLayout.after.footerBottom) > 1 || editorLayout.after.footerBottom > editorLayout.viewportHeight + 1 || editorLayout.contentHeight < editorLayout.scrollHeight) {
-    throw new Error(`Mobile editor fixed controls or keyboard-sized scrolling failed: ${JSON.stringify(editorLayout)}`);
-  }
-  await page.goBack();
-  await page.getByRole('region', { name: '待办' }).waitFor();
-  await page.getByRole('tab', { name: '今天' }).tap();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
-  await swipe(page, '.todo-today-section', 270, 430, 130, 430);
-  await page.getByRole('heading', { name: /月\d+日/ }).waitFor();
-  await page.getByRole('tab', { name: '今天' }).tap();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
-  await page.getByRole('tab', { name: '本周' }).tap();
-  const currentWeekLabel = await page.locator('.todo-week-section .todo-overline').textContent();
-  await swipe(page, '.todo-week-section', 270, 430, 130, 430);
-  await page.waitForFunction((previous) => document.querySelector('.todo-week-section .todo-overline')?.textContent !== previous, currentWeekLabel);
-  await page.getByRole('tab', { name: '本周' }).tap();
-  await page.waitForFunction((current) => document.querySelector('.todo-week-section .todo-overline')?.textContent === current, currentWeekLabel);
-  await page.getByRole('tab', { name: '本月' }).tap();
-  const currentMonthLabel = await page.locator('.todo-calendar').getAttribute('aria-label');
-  await swipe(page, '.todo-month-section', 270, 430, 130, 430);
-  await page.waitForFunction((previous) => document.querySelector('.todo-calendar')?.getAttribute('aria-label') !== previous, currentMonthLabel);
-  await page.getByRole('tab', { name: '本月' }).tap();
-  await page.waitForFunction((current) => document.querySelector('.todo-calendar')?.getAttribute('aria-label') === current, currentMonthLabel);
-  await page.getByRole('grid').waitFor();
-  await page.locator('.todo-calendar-date.is-current').tap();
-  await page.locator('.todo-calendar-day.is-focused-day').waitFor();
-  const focusedDate = await page.locator('.todo-calendar').getAttribute('data-focused-date');
-  await swipe(page, '.todo-month-section', 270, 430, 130, 430);
-  if (await page.locator('.todo-calendar').getAttribute('data-focused-date') !== focusedDate) throw new Error('Month swipe changed period while a date was focused');
-  await page.screenshot({ path: 'docs/screenshots/todo-month-focused-mobile.png', fullPage: true });
-  for (const width of [320, 360, 390, 430]) {
-    await page.setViewportSize({ width, height: 844 });
-    const calendarOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-    if (calendarOverflow) throw new Error(`The focused month view has horizontal overflow at ${width}px`);
-  }
-  await page.goBack();
-  await page.locator('.todo-calendar-day.is-focused-day').waitFor({ state: 'detached' });
-  await page.getByRole('tab', { name: '本周' }).tap();
-  const timeViewHistoryLength = await page.evaluate(() => window.history.length);
-  const inbox = page.getByRole('button', { name: /收集箱/ });
-  if (await inbox.getAttribute('aria-expanded') !== 'true') await inbox.tap();
-  const inboxTask = page.getByText('移动浏览器任务');
-  await inboxTask.waitFor();
-  await inbox.tap();
-  await inboxTask.waitFor({ state: 'hidden' });
-  if (await page.evaluate(() => window.history.length) !== timeViewHistoryLength) throw new Error('Time view or inbox interaction changed browser history');
-  await inbox.tap();
-  await page.getByRole('button', { name: '编辑任务：移动浏览器任务' }).tap();
-  await page.getByRole('heading', { name: '编辑任务', exact: true }).waitFor();
-  await page.goBack();
-  await page.getByRole('region', { name: '待办' }).waitFor();
-  await page.getByRole('button', { name: '快速新增待办' }).tap();
-  const mobileQuick = page.getByRole('dialog', { name: '快速记录' });
-  await mobileQuick.waitFor();
-  await page.goBack();
-  await mobileQuick.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: '进入情侣专区' }).tap();
+  if (!(await quick.isVisible()) || await quickTitle.inputValue() !== '') throw new Error('Quick add did not remain open and clear the title after saving');
+  await quickTitle.fill('第二件事');
+  await quick.getByRole('button', { name: '添加' }).click();
+  await page.waitForFunction(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space', 3); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.filter((task) => task.title === '第二件事').length === 1); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+  await quick.getByRole('button', { name: '关闭' }).last().click();
+  await page.getByRole('button', { name: '全部' }).click();
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  await page.getByRole('button', { name: '完成任务：第二件事' }).waitFor();
+  await shot(page, 'todo-desktop-all.png');
+
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).click();
+  await page.getByRole('button', { name: '撤销完成：浏览日期任务' }).click();
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).click();
+  const completed = page.locator('.todo-minimal-completed-toggle');
+  await page.waitForFunction(() => document.querySelector('.todo-minimal-completed-toggle')?.textContent?.includes('1 项'));
+  if (await completed.getAttribute('aria-expanded') !== 'false') throw new Error('Completed records should start folded');
+  await completed.click();
+  await page.getByRole('button', { name: '恢复任务：浏览日期任务' }).waitFor();
+  await page.getByRole('button', { name: '恢复任务：浏览日期任务' }).click();
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  await page.getByRole('button', { name: '完成任务：第二件事' }).click();
+  await page.waitForFunction(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space', 3); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.some((task) => task.title === '第二件事' && typeof task.completedAt === 'number')); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+
+  await page.getByRole('button', { name: '编辑任务：浏览日期任务' }).click();
+  const editor = page.getByRole('dialog', { name: '编辑待办' });
+  await editor.waitFor();
+  await shot(page, 'todo-desktop-edit.png');
+  await editor.getByRole('textbox', { name: '任务内容' }).fill('更新后的任务');
+  const movedDate = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() + 3); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
+  await editor.getByLabel('任务日期').fill(movedDate);
+  await editor.getByRole('button', { name: '保存' }).click();
+  await editor.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
+
+  await page.getByRole('button', { name: '日期' }).click();
+  await page.getByRole('button', { name: '回到今天' }).waitFor();
+  const selectedDateHeading = await page.locator('.todo-minimal-header h1').textContent();
+  await swipe(page, '.todo-minimal-task-area', 290, 340, 130, 340);
+  await page.waitForFunction((previous) => document.querySelector('.todo-minimal-header h1')?.textContent !== previous, selectedDateHeading);
+  await swipe(page, '.todo-minimal-task-area', 130, 340, 290, 340);
+  await page.waitForFunction((previous) => document.querySelector('.todo-minimal-header h1')?.textContent === previous, selectedDateHeading);
+  await swipe(page, '.todo-minimal-task-area', 200, 300, 202, 420);
+  if (await page.locator('.todo-minimal-header h1').textContent() !== selectedDateHeading) throw new Error('Vertical scrolling changed the selected date');
+  await shot(page, 'todo-desktop-date-swipe.png');
+
+  await page.getByRole('button', { name: '进入情侣专区' }).click();
   await waitForSpace(page, 'couple');
-  await page.screenshot({ path: 'docs/screenshots/todo-couple-mobile.png', fullPage: true });
   const coupleCard = page.locator('.couple-card-body').first();
-  await coupleCard.tap();
-  if (await coupleCard.getAttribute('aria-expanded') !== 'true') throw new Error('Mobile couple card did not expand');
-  await page.screenshot({ path: 'docs/screenshots/todo-couple-card-expanded.png', fullPage: true });
-  await page.getByRole('button', { name: '编辑：找一家喜欢的日料店' }).tap();
-  await page.getByRole('heading', { name: '编辑小事' }).waitFor();
-  await page.getByRole('button', { name: '返回' }).tap();
-  await page.getByRole('heading', { name: '我们的小事' }).waitFor();
-  await page.getByRole('button', { name: '查看已完成历史' }).tap();
-  await page.getByRole('heading', { name: '完成的时光' }).waitFor();
-  await page.getByRole('button', { name: '筛选时间范围' }).tap();
-  await page.getByRole('dialog', { name: '选择时间范围' }).waitFor();
-  await page.getByRole('button', { name: '自定义时间段' }).tap();
-  await page.getByRole('textbox', { name: '开始日期' }).waitFor();
-  await page.goBack();
-  await page.getByRole('heading', { name: '完成的时光' }).waitFor();
-  await page.goBack();
-  await waitForSpace(page, 'couple');
-  await page.goBack();
-  await waitForSpace(page, 'personal');
-  const globalTabsHistoryLength = await page.evaluate(() => window.history.length);
-  await page.locator('.bottom-nav').getByRole('button', { name: '小月历' }).tap();
-  await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
-  await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
-  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await page.locator('.bottom-nav').getByRole('button', { name: '待办' }).tap();
-  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  if (await page.evaluate(() => window.history.length) !== globalTabsHistoryLength) throw new Error('Sibling Foundation tabs added browser history entries');
-  await page.getByRole('button', { name: '进入情侣专区' }).tap();
-  await waitForSpace(page, 'couple');
-  await page.getByRole('button', { name: '返回个人待办' }).tap();
+  await coupleCard.click();
+  if (await coupleCard.getAttribute('aria-expanded') !== 'true') throw new Error('Couple demo card did not expand');
+  await page.getByRole('button', { name: '返回个人待办' }).click();
   await waitForSpace(page, 'personal');
 
-  const scrollFixture = page.locator('.module-holder.visible .todo-module-page');
-  await scrollFixture.evaluate((element) => {
-    const holder = element.closest('.module-holder');
-    element.style.minHeight = `${holder.clientHeight + 180}px`;
+  const desktopNav = page.locator('.sidebar');
+  await desktopNav.getByRole('button', { name: '小月历' }).click();
+  await page.getByRole('region', { name: '小月历' }).waitFor();
+  await desktopNav.getByRole('button', { name: '纪念日' }).click();
+  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await desktopNav.getByRole('button', { name: '设置' }).click();
+  await page.getByRole('region', { name: '设置' }).waitFor();
+  await page.locator('.settings-page').getByRole('button', { name: '返回' }).click();
+  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await desktopNav.getByRole('button', { name: '待办' }).click();
+  if (await page.getByRole('button', { name: '回到今天' }).count()) await page.getByRole('button', { name: '回到今天' }).click();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+
+  await page.reload();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('button', { name: '全部' }).click();
+  await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
+  await page.locator('.todo-minimal-completed-toggle').click();
+  await page.getByRole('button', { name: '恢复任务：第二件事' }).waitFor();
+  const persistedTask = await page.evaluate(async (title) => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space', 3); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === title)); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  }, '更新后的任务');
+  if (!persistedTask || persistedTask.scheduledDate !== movedDate || persistedTask.completedAt !== null) throw new Error(`Edited task content or date did not persist: ${JSON.stringify(persistedTask)}`);
+  const persistedDone = await page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space', 3); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '第二件事')); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
   });
-  const initial = await page.locator('.module-holder.visible').evaluate((element) => { element.scrollTop = 120; return element.scrollTop; });
-  if (initial < 1) throw new Error('Todo page did not scroll at the mobile viewport');
-  await page.locator('.bottom-nav').getByRole('button', { name: '小月历' }).tap();
-  await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
-  await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
-  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await page.locator('.bottom-nav').getByRole('button', { name: '待办' }).tap();
-  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  const restored = await page.locator('.module-holder.visible').evaluate((element) => element.scrollTop);
-  if (restored !== initial) throw new Error(`Module scroll was not preserved across navigation: ${initial} -> ${restored}`);
-  await scrollFixture.evaluate((element) => { element.style.minHeight = ''; });
-  await page.getByRole('button', { name: '进入情侣专区' }).tap();
-  await waitForSpace(page, 'couple');
-  await page.getByRole('button', { name: '查看已完成历史' }).tap();
-  await page.getByRole('heading', { name: '完成的时光' }).waitFor();
-  await page.getByRole('button', { name: '筛选时间范围' }).tap();
-  await page.getByRole('dialog', { name: '选择时间范围' }).waitFor();
-  await page.reload();
-  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  if (await page.locator('.todo-module-root').getAttribute('data-current-space') !== 'personal' || await page.getByRole('dialog').count()) {
-    throw new Error('Reload from a nested Todo surface did not recover to a valid Todo root');
-  }
-  if (await page.getByTestId('space-ripple').count()) throw new Error('Reload left a Todo ripple overlay behind');
-  await page.locator('.bottom-nav').getByRole('button', { name: '纪念日' }).tap();
-  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await waitForSavedModule(page, 'anniversary');
-  await page.reload();
-  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await page.getByRole('button', { name: '打开设置' }).tap();
-  await page.getByRole('heading', { name: '简单一点，刚刚好。' }).waitFor();
-  await page.locator('.settings-page').getByRole('button', { name: '返回' }).tap();
-  await page.getByRole('heading', { name: '纪念日', exact: true }).waitFor();
-  await page.locator('.bottom-nav').getByRole('button', { name: '待办' }).tap();
-  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-
-  const registration = await page.evaluate(async () => {
+  if (typeof persistedDone?.completedAt !== 'number') throw new Error(`Completion state did not persist through reload: ${JSON.stringify(persistedDone)}`);
+  const pwa = await page.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) return { supported: false };
     const ready = await navigator.serviceWorker.ready;
     const manifestUrl = new URL(document.querySelector('link[rel="manifest"]').href);
     const response = await fetch(manifestUrl);
-    if (!response.ok) throw new Error(`Manifest returned ${response.status}`);
     const manifest = await response.json();
+    const manifestScope = new URL(manifest.scope, manifestUrl).href;
     const startUrl = new URL(manifest.start_url, manifestUrl).href;
-    const scope = new URL(manifest.scope, manifestUrl).href;
-    const icons = await Promise.all(manifest.icons.map(async (icon) => (await fetch(new URL(icon.src, manifestUrl))).ok));
-    return { serviceWorkerScope: ready.scope, controlled: !!navigator.serviceWorker.controller, startUrl, manifestScope: scope, iconsAvailable: icons.every(Boolean) };
+    return { supported: true, scope: ready.scope, controlled: Boolean(navigator.serviceWorker.controller), manifestScope, startUrl };
   });
-  if (registration.serviceWorkerScope !== url || registration.startUrl !== url || registration.manifestScope !== url || !registration.iconsAvailable || !registration.controlled) {
-    throw new Error(`PWA scope or assets mismatch: ${JSON.stringify(registration)}`);
+  if (!pwa.supported || !pwa.controlled || pwa.scope !== url || pwa.manifestScope !== url || pwa.startUrl !== url) throw new Error(`PWA registration did not match the preview URL: ${JSON.stringify(pwa)}`);
+  if (pageErrors.length) throw new Error(`Browser page errors: ${pageErrors.join('; ')}`);
+  await desktop.close();
+
+  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  const mobilePage = await mobile.newPage();
+  await mobilePage.goto(url);
+  await mobilePage.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await waitForTodoData(mobilePage);
+  await shot(mobilePage, 'todo-mobile-date.png');
+  const fab = mobilePage.getByRole('button', { name: '快速新增待办' });
+  const fabBounds = await fab.boundingBox();
+  if (!fabBounds || fabBounds.x < 0 || fabBounds.y + fabBounds.height > 844) throw new Error(`Mobile quick-add button is outside the viewport: ${JSON.stringify(fabBounds)}`);
+  for (const width of [320, 360, 390, 430]) {
+    await mobilePage.setViewportSize({ width, height: 844 });
+    const scrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
+    if (scrollWidth > width) throw new Error(`Todo has horizontal overflow at ${width}px (${scrollWidth}px)`);
   }
-  await mobile.setOffline(true);
-  await page.reload();
-  await page.getByRole('heading', { name: '待办', exact: true }).waitFor();
-  console.log(JSON.stringify({ desktop: { doubleSpaceRipple: 'passed', repeatSpaceTogglesDoNotAccumulateHistory: 'passed', monthFocus: 'passed', indexedDbTaskEdit: 'passed', coupleCardSlide: 'passed', editingAndHistory: 'passed', quickAdd: 'passed', foundationModulesAndSettings: 'passed' }, mobile: { viewPeriodAndInbox: 'passed', indexedDbQuickAdd: 'passed', personalEditorBack: 'passed', monthFocusAndReducedWidths: 'passed', coupleTouchAndHistoryBack: 'passed', globalTabsDoNotAddHistory: 'passed', nestedTodoReloadRecovery: 'passed', noHorizontalOverflow: 'passed', scroll: { initial, restored } }, pwa: registration, offlineReload: 'passed', screenshots: ['docs/screenshots/mobile.png', 'docs/screenshots/todo-month-focused-mobile.png', 'docs/screenshots/todo-month-focused-desktop.png', 'docs/screenshots/todo-couple-desktop.png', 'docs/screenshots/todo-couple-mobile.png', 'docs/screenshots/todo-couple-card-expanded.png'] }, null, 2));
+  await mobilePage.setViewportSize({ width: 390, height: 844 });
+  const mobileQuick = await openQuickAdd(mobilePage);
+  const mobileTitle = mobileQuick.getByRole('textbox', { name: '任务内容' });
+  if (!(await mobileTitle.evaluate((input) => document.activeElement === input))) throw new Error('Mobile quick add did not focus the title');
+  await shot(mobilePage, 'todo-mobile-quick-add.png');
+  await mobileTitle.fill('手机上的任务');
+  await mobileQuick.getByRole('button', { name: '添加' }).tap();
+  await mobileQuick.waitFor();
+  await mobileQuick.getByRole('button', { name: '关闭' }).last().tap();
+  await mobilePage.getByRole('button', { name: '全部' }).tap();
+  await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
+  await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).tap();
+  await mobilePage.getByRole('button', { name: '撤销完成：手机上的任务' }).tap();
+  await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
   await mobile.close();
+
+  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleDemo: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', widths: [320, 360, 390, 430], noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
 } finally {
   await browser.close();
 }

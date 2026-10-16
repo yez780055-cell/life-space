@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../app/shell/App';
 import { DB_NAME, resetDatabaseConnectionForTests } from '../../shared/storage/database';
-import { addDays, fromDateKey, todayKey } from './data/dates';
+import { addDays, todayKey } from './data/dates';
 import { todoRepository } from './data/repository';
 
 function rect(left: number, top: number, width: number, height: number) {
@@ -26,29 +26,15 @@ async function removeDatabase() {
   });
 }
 
-async function browserHistoryBack(expectedPopstates = 1) {
-  await act(async () => {
-    const popped = new Promise<void>((resolve) => {
-      let count = 0;
-      const onPopState = () => {
-        count += 1;
-        if (count === expectedPopstates) {
-          window.removeEventListener('popstate', onPopState);
-          resolve();
-        }
-      };
-      window.addEventListener('popstate', onPopState);
-    });
-    history.back();
-    await popped;
-  });
-}
-
 async function enterCouple() {
   fireEvent.click(screen.getByRole('button', { name: '进入情侣专区' }));
   const ripple = await screen.findByTestId('space-ripple');
   fireEvent.animationEnd(ripple);
   await screen.findByRole('region', { name: '我们的小事' });
+}
+
+async function waitForTodoData() {
+  await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-loading')).toBe('false'));
 }
 
 beforeEach(async () => {
@@ -58,376 +44,202 @@ beforeEach(async () => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-describe('Todo Phase 2B', () => {
-  it('opens on an empty personal week and does not insert demo tasks', async () => {
+describe('minimal personal Todo', () => {
+  it('opens on today, shows no demo tasks, and exposes only date and all views', async () => {
     render(<App/>);
     const page = await screen.findByRole('region', { name: '待办' });
-    expect(within(page).getByRole('tab', { name: '本周' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(page).getByRole('heading', { name: '这一周' })).toBeTruthy();
-    expect(within(page).getByText('这一周还没有安排任务。')).toBeTruthy();
+    expect(within(page).getByRole('heading', { name: '今天' })).toBeTruthy();
+    expect(within(page).getByRole('button', { name: '日期' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(page).getByRole('button', { name: '全部' }).getAttribute('aria-pressed')).toBe('false');
+    expect(within(page).getByText('这一天没有未完成的待办。')).toBeTruthy();
     expect(await todoRepository.listTasks()).toEqual([]);
     expect(document.querySelector('.todo-module-root')?.getAttribute('data-current-space')).toBe('personal');
   });
 
-  it('saves quick capture to IndexedDB and keeps the inbox task after reload', async () => {
+  it('quick-add focuses the title, uses the selected date, stays open for repeated entry, and rejects blank titles', async () => {
+    const selected = addDays(todayKey(), 2);
     render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-loading')).toBe('false'));
+    await screen.findByRole('heading', { name: '今天' });
+    fireEvent.click(screen.getByRole('button', { name: '后一天' }));
+    fireEvent.click(screen.getByRole('button', { name: '后一天' }));
+    expect(screen.getByRole('button', { name: '回到今天' })).toBeTruthy();
+
+    const addTrigger = screen.getByRole('button', { name: '快速新增待办' });
+    fireEvent.click(addTrigger);
+    const dialog = await screen.findByRole('dialog', { name: '快速添加' });
+    const title = within(dialog).getByRole('textbox', { name: '任务内容' }) as HTMLInputElement;
+    expect(document.activeElement).toBe(title);
+    expect(document.querySelector('.todo-module-root')?.hasAttribute('inert')).toBe(true);
+    expect((within(dialog).getByLabelText('任务日期') as HTMLInputElement).value).toBe(selected);
+    const submitButton = within(dialog).getByRole('button', { name: '添加' });
+    expect(submitButton).toHaveProperty('disabled', true);
+    fireEvent.change(title, { target: { value: '测试焦点环' } });
+    expect(submitButton).toHaveProperty('disabled', false);
+    const closeButton = dialog.querySelector('.todo-dialog-close') as HTMLButtonElement;
+    closeButton.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(submitButton);
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(closeButton);
+    title.focus();
+    fireEvent.change(title, { target: { value: '  浇花  ' } });
+    fireEvent.submit(dialog);
+    await waitFor(async () => expect(await todoRepository.listTasks()).toHaveLength(1));
+    expect((await todoRepository.listTasks())[0]).toMatchObject({ title: '浇花', scheduledDate: selected });
+    expect(screen.getByRole('dialog', { name: '快速添加' })).toBeTruthy();
+    expect((screen.getByRole('textbox', { name: '任务内容' }) as HTMLInputElement).value).toBe('');
+
+    fireEvent.change(screen.getByRole('textbox', { name: '任务内容' }), { target: { value: '收衣服' } });
+    fireEvent.click(screen.getByRole('button', { name: '添加' }));
+    await waitFor(async () => expect(await todoRepository.listTasks()).toHaveLength(2));
+    const addedTitles = (await todoRepository.listTasks()).map((task) => task.title);
+    expect(addedTitles).toHaveLength(2);
+    expect(addedTitles).toEqual(expect.arrayContaining(['浇花', '收衣服']));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '快速添加' })).toBeNull());
+    expect(await screen.findByRole('button', { name: '完成任务：浇花' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(addTrigger));
+  });
+
+  it('keeps the selected date when switching to All and back, and returns to today', async () => {
+    const target = addDays(todayKey(), 3);
+    render(<App/>);
+    await screen.findByRole('heading', { name: '今天' });
+    fireEvent.click(screen.getByRole('button', { name: '后一天' }));
+    fireEvent.click(screen.getByRole('button', { name: '后一天' }));
+    fireEvent.click(screen.getByRole('button', { name: '后一天' }));
+    await screen.findByRole('button', { name: '回到今天' });
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    expect(screen.getByRole('heading', { name: '全部未完成' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '日期' }));
     fireEvent.click(screen.getByRole('button', { name: '快速新增待办' }));
-    const dialog = await screen.findByRole('dialog', { name: '快速记录' });
-    fireEvent.change(within(dialog).getByRole('textbox', { name: '任务标题' }), { target: { value: '  买洗衣液  ' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
-    expect((await todoRepository.listTasks())[0].title).toBe('买洗衣液');
-    expect(await screen.findByRole('status')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
-    expect(await screen.findByText('买洗衣液')).toBeTruthy();
-    cleanup();
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
-    expect(await screen.findByText('买洗衣液')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: '快速添加' });
+    expect((within(dialog).getByLabelText('任务日期') as HTMLInputElement).value).toBe(target);
+    fireEvent.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '快速添加' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: '回到今天' }));
+    expect(screen.getByRole('heading', { name: '今天' })).toBeTruthy();
   });
 
-  it('moves a real inbox task to a date, saves details, and edits the same stored entity', async () => {
-    await todoRepository.createQuickTask('买洗衣液');
+  it('shows all one-off tasks grouped by date, including undated and past records, and folds completed records', async () => {
+    const past = addDays(todayKey(), -2), future = addDays(todayKey(), 4);
+    const completed = await todoRepository.createQuickTask('已完成旧任务', past);
+    await todoRepository.createQuickTask('未来安排', future);
+    await todoRepository.createQuickTask('没有日期');
+    await todoRepository.setCompleted(completed.id, null, true);
     render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：买洗衣液' }));
-    await screen.findByRole('heading', { name: '编辑任务' });
-    const targetDate = addDays(todayKey(), 2);
-    fireEvent.change(screen.getByLabelText('任务日期'), { target: { value: targetDate } });
-    fireEvent.change(screen.getByLabelText('具体时间'), { target: { value: '19:30' } });
-    fireEvent.click(screen.getByText('更多设置'));
-    fireEvent.change(screen.getByRole('textbox', { name: '备注' }), { target: { value: '买无香型补充装' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: '编辑任务' })).toBeNull());
-    const saved = (await todoRepository.listTasks())[0];
-    expect(saved.scheduledDate).toBe(targetDate);
-    expect(saved.scheduledTime).toBe('19:30');
-    expect(saved.note).toBe('买无香型补充装');
-    expect((await todoRepository.listTasks())).toHaveLength(1);
-    fireEvent.click(screen.getByRole('tab', { name: '本周' }));
-    expect(await screen.findByRole('button', { name: '编辑任务：买洗衣液' })).toBeTruthy();
+    await screen.findByRole('heading', { name: '今天' });
+    await waitForTodoData();
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    await waitForTodoData();
+    expect(await screen.findByRole('button', { name: '完成任务：未来安排' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '完成任务：没有日期' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '恢复任务：已完成旧任务' })).toBeNull();
+    const completedToggle = document.querySelector('.todo-minimal-completed-toggle') as HTMLButtonElement;
+    expect(completedToggle).toBeTruthy();
+    expect(completedToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(completedToggle);
+    expect(await screen.findByRole('button', { name: '恢复任务：已完成旧任务' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '未设置日期' })).toBeTruthy();
   });
 
-  it('persists completion and hides completed tasks without deleting them', async () => {
+  it('moves a task to completed immediately, undoes only the selected completion, and persists both states', async () => {
+    const first = await todoRepository.createQuickTask('整理书桌', todayKey());
+    const second = await todoRepository.createQuickTask('回收纸箱', todayKey());
+    render(<App/>);
+    await screen.findByRole('button', { name: '完成任务：整理书桌' });
+    fireEvent.click(screen.getByRole('button', { name: '完成任务：整理书桌' }));
+    await screen.findByRole('button', { name: '撤销完成：整理书桌' });
+    fireEvent.click(screen.getByRole('button', { name: '完成任务：回收纸箱' }));
+    await screen.findByRole('button', { name: '撤销完成：回收纸箱' });
+    await waitFor(async () => {
+      expect((await todoRepository.listTasks()).find((task) => task.id === first.id)?.completedAt).toBeTypeOf('number');
+      expect((await todoRepository.listTasks()).find((task) => task.id === second.id)?.completedAt).toBeTypeOf('number');
+    });
+    fireEvent.click(screen.getByRole('button', { name: '撤销完成：回收纸箱' }));
+    await screen.findByRole('button', { name: '完成任务：回收纸箱' });
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((task) => task.id === second.id)?.completedAt).toBeNull());
+    expect((await todoRepository.listTasks()).find((task) => task.id === first.id)?.completedAt).toBeTypeOf('number');
+    fireEvent.click(document.querySelector('.todo-minimal-completed-toggle')!);
+    expect(screen.getByRole('button', { name: '恢复任务：整理书桌' })).toBeTruthy();
+  });
+
+  it('edits title and date while preserving legacy notes, tags, subtasks, reminders, and completion metadata', async () => {
+    const originalDate = todayKey();
     const task = await todoRepository.saveTask({
-      title: '整理书桌', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [], subtasks: [], recurrence: null,
-      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
+      title: '准备植物换盆', note: '先铺报纸', scheduledDate: originalDate, scheduledTime: '18:30',
+      tags: ['家务'], subtasks: [{ id: 'soil', title: '买土', checked: false }], recurrence: null, recurrenceHistory: [],
+      reminder: { enabled: true, minutesBefore: 20 }
     });
     render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('tab', { name: '今天' }));
-    fireEvent.click(await screen.findByRole('button', { name: '完成任务：整理书桌' }));
-    await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.completedAt).toBeTypeOf('number'));
-    expect(await screen.findByRole('button', { name: '恢复任务：整理书桌' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '隐藏已完成' }));
-    expect(screen.queryByRole('button', { name: '恢复任务：整理书桌' })).toBeNull();
-    expect((await todoRepository.listTasks())).toHaveLength(1);
+    await screen.findByRole('button', { name: '编辑任务：准备植物换盆' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑任务：准备植物换盆' }));
+    const editor = await screen.findByRole('dialog', { name: '编辑待办' });
+    fireEvent.change(within(editor).getByRole('textbox', { name: '任务内容' }), { target: { value: '给绿萝换盆' } });
+    const newDate = addDays(originalDate, 1);
+    fireEvent.change(within(editor).getByLabelText('任务日期'), { target: { value: newDate } });
+    fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.scheduledDate).toBe(newDate));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑待办' })).toBeNull());
+    const saved = (await todoRepository.listTasks()).find((record) => record.id === task.id)!;
+    expect(saved).toMatchObject({ title: '给绿萝换盆', note: '先铺报纸', scheduledTime: '18:30', tags: ['家务'], subtasks: [{ id: 'soil', title: '买土', checked: false }], reminder: { enabled: true, minutesBefore: 20 }, completedAt: null, recurrence: null });
+    expect(await todoRepository.listTasks()).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    expect(await screen.findByRole('button', { name: '完成任务：给绿萝换盆' })).toBeTruthy();
   });
 
-  it('shows actionable subtasks in task rows and preserves automatic versus manual completion', async () => {
-    const autoTask = await todoRepository.saveTask({
-      title: '收拾厨房', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [],
-      subtasks: [{ id: 'auto-a', title: '清理台面', checked: false }, { id: 'auto-b', title: '擦灶台', checked: false }],
-      recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    const manualTask = await todoRepository.saveTask({
-      title: '浇花', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [],
-      subtasks: [{ id: 'manual-a', title: '给绿萝浇水', checked: false }],
-      recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    render(<App/>);
-    await screen.findByRole('heading', { name: '这一周' });
-    fireEvent.click(await screen.findByRole('checkbox', { name: '子任务：清理台面' }));
-    await waitFor(() => expect((screen.getByRole('checkbox', { name: '子任务：清理台面' }) as HTMLInputElement).checked).toBe(true));
-    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：擦灶台' }));
-    await waitFor(async () => {
-      const saved = (await todoRepository.listTasks()).find((item) => item.id === autoTask.id);
-      expect(saved?.completionSource).toBe('subtasks');
-      expect(saved?.completedAt).toBeTypeOf('number');
-    });
-    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：清理台面' }));
-    await waitFor(async () => {
-      const saved = (await todoRepository.listTasks()).find((item) => item.id === autoTask.id);
-      expect(saved?.completionSource).toBeNull();
-      expect(saved?.completedAt).toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: '完成任务：浇花' }));
-    await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === manualTask.id)?.completionSource).toBe('manual'));
-    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：给绿萝浇水' }));
-    await waitFor(() => expect((screen.getByRole('checkbox', { name: '子任务：给绿萝浇水' }) as HTMLInputElement).checked).toBe(true));
-    fireEvent.click(screen.getByRole('checkbox', { name: '子任务：给绿萝浇水' }));
-    await waitFor(async () => {
-      const saved = (await todoRepository.listTasks()).find((item) => item.id === manualTask.id);
-      expect(saved?.completionSource).toBe('manual');
-      expect(saved?.completedAt).toBeTypeOf('number');
-    });
-  });
-
-  it('updates a task-row subtask immediately while IndexedDB persistence is pending', async () => {
+  it('asks before deleting a recurring series and removes its history only after confirmation', async () => {
+    const start = todayKey();
+    const historicalDate = addDays(start, -2);
     const task = await todoRepository.saveTask({
-      title: '周五的安排', note: '', scheduledDate: addDays(todayKey(), 2), scheduledTime: null, tags: [],
-      subtasks: [{ id: 'fast-child', title: '带上钥匙', checked: false }], recurrence: null, recurrenceHistory: [],
+      title: '每日服药', note: '', scheduledDate: null, scheduledTime: null, tags: [], subtasks: [],
+      recurrence: null, recurrenceHistory: [{ frequency: 'daily', interval: 1, startsOn: historicalDate, endsOn: addDays(start, -1), weekdays: [] }],
       reminder: { enabled: false, minutesBefore: 10 }
     });
-    const persist = todoRepository.setSubtaskChecked.bind(todoRepository);
-    let releaseWrite: (() => void) | undefined;
-    let writePromise: Promise<void> | undefined;
-    vi.spyOn(todoRepository, 'setSubtaskChecked').mockImplementation((...args) => {
-      writePromise = new Promise<void>((resolve) => { releaseWrite = resolve; }).then(() => persist(...args));
-      return writePromise;
-    });
+    await todoRepository.setCompleted(task.id, historicalDate, true);
     render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    const checkbox = await screen.findByRole('checkbox', { name: '子任务：带上钥匙' });
-    fireEvent.click(checkbox);
-    expect((checkbox as HTMLInputElement).checked).toBe(true);
-    expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.subtasks[0].checked).toBe(false);
-
-    await act(async () => {
-      releaseWrite?.();
-      await writePromise;
-    });
-    await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.subtasks[0].checked).toBe(true));
-    expect((screen.getByRole('checkbox', { name: '子任务：带上钥匙' }) as HTMLInputElement).checked).toBe(true);
+    await screen.findByRole('heading', { name: '今天' });
+    await waitForTodoData();
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    fireEvent.click(screen.getByRole('button', { name: /已完成/ }));
+    const masterEdit = document.querySelector(`[data-task-key="${task.id}"] .todo-minimal-edit`);
+    expect(masterEdit).toBeTruthy();
+    fireEvent.click(masterEdit!);
+    const editor = await screen.findByRole('dialog', { name: '编辑待办' });
+    fireEvent.click(within(editor).getByRole('button', { name: '删除' }));
+    expect(within(editor).getByText('这会删除整个重复任务系列和它的周期记录。')).toBeTruthy();
+    expect((await todoRepository.listTasks())).toHaveLength(1);
+    fireEvent.click(within(editor).getByRole('button', { name: '确认删除' }));
+    await waitFor(async () => expect(await todoRepository.listTasks()).toHaveLength(0));
+    expect(await todoRepository.listOccurrences()).toEqual([]);
   });
 
-  it('adds, renames, and deletes draft subtasks in the task editor', async () => {
-    await todoRepository.createQuickTask('准备周末出门');
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：准备周末出门' }));
-    fireEvent.click(screen.getByRole('button', { name: /添加子任务/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: '子任务标题' }), { target: { value: '带上外套' } });
-    expect(screen.getByRole('button', { name: '删除子任务：带上外套' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '删除子任务：带上外套' }));
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
-    expect((await todoRepository.listTasks())[0].subtasks).toEqual([]);
-  });
-
-  it('keeps the editor draft open when IndexedDB saving fails', async () => {
-    await todoRepository.createQuickTask('草稿任务');
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：草稿任务' }));
-    const title = await screen.findByRole('textbox', { name: '任务标题' });
-    fireEvent.change(title, { target: { value: '已修改的草稿' } });
-    vi.spyOn(todoRepository, 'saveTask').mockRejectedValueOnce(new Error('本机存储暂不可用'));
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect((await screen.findByRole('status')).textContent).toContain('本机存储暂不可用');
-    expect(screen.getByRole('dialog', { name: '编辑任务' })).toBeTruthy();
-    expect((screen.getByRole('textbox', { name: '任务标题' }) as HTMLInputElement).value).toBe('已修改的草稿');
-  });
-
-  it('opens and closes a month date in place and creates a task for the selected date', async () => {
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('tab', { name: '本月' }));
-    const date = addDays(todayKey(), 3);
-    const dateObject = fromDateKey(date);
-    const label = (dateObject.getMonth() + 1) + '月' + dateObject.getDate() + '日';
-    const grid = screen.getByRole('grid');
-    fireEvent.click(within(grid).getByRole('gridcell', { name: label }));
-    await waitFor(() => expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeTruthy());
-    expect(screen.getByText('日期聚焦')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '添加当天任务' }));
-    const dialog = await screen.findByRole('dialog', { name: '快速记录' });
-    expect(within(dialog).getByText(new RegExp('保存到'))).toBeTruthy();
-    fireEvent.change(within(dialog).getByRole('textbox', { name: '任务标题' }), { target: { value: '给花换盆' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect((await todoRepository.listTasks())[0].scheduledDate).toBe(date);
-    expect(await screen.findByRole('button', { name: '编辑任务：给花换盆' })).toBeTruthy();
-    await browserHistoryBack();
-    await waitFor(() => expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeNull());
-  });
-
-  it('keeps the focused month page under the editor sheet and restores focus on Escape', async () => {
-    await todoRepository.saveTask({
-      title: '读几页书', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [], subtasks: [], recurrence: null,
-      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('tab', { name: '本月' }));
-    const today = fromDateKey(todayKey());
-    const todayLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
-    fireEvent.click(screen.getByRole('gridcell', { name: new RegExp(todayLabel) }));
-    const editorButton = await screen.findByRole('button', { name: '编辑任务：读几页书' });
-    const focusedDate = document.querySelector('.todo-calendar')?.getAttribute('data-focused-date');
-    fireEvent.click(editorButton);
-    const editor = await screen.findByRole('dialog', { name: '编辑任务' });
-    expect(document.querySelector('.todo-editor-overlay')).toBeTruthy();
-    expect(document.querySelector('.todo-module-root')?.hasAttribute('inert')).toBe(true);
-    expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeTruthy();
-    expect(document.querySelector('.todo-calendar')?.getAttribute('data-focused-date')).toBe(focusedDate);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
-    expect(document.querySelector('.todo-calendar-day.is-focused-day')).toBeTruthy();
-    await waitFor(() => expect(document.activeElement).toBe(editorButton));
-    expect(editor.isConnected).toBe(false);
-  });
-
-  it('creates a daily series through the editor and stores it as a rule, not copied rows', async () => {
-    const task = await todoRepository.saveTask({
-      title: '服药', note: '', scheduledDate: todayKey(), scheduledTime: '08:30', tags: [], subtasks: [], recurrence: null,
-      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('tab', { name: '今天' }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：服药' }));
-    expect((document.querySelector('.todo-editor-more') as HTMLDetailsElement).open).toBe(false);
-    fireEvent.click(screen.getByText('更多设置'));
-    const recurrence = await screen.findByRole('combobox', { name: '重复规则' });
-    fireEvent.change(recurrence, { target: { value: 'daily' } });
-    expect(document.querySelector('.todo-repeat-summary')?.textContent).toContain('每天');
-    expect(document.querySelector('.todo-repeat-advanced')?.hasAttribute('open')).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(async () => expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.recurrence?.frequency).toBe('daily'));
-    expect(await todoRepository.listOccurrences()).toHaveLength(0);
-  });
-
-  it('preselects an existing advanced weekly rule and keeps occurrence scope as the default', async () => {
-    const today = todayKey();
-    const weekday = fromDateKey(today).getDay();
-    const task = await todoRepository.saveTask({
-      title: '每周整理', note: '', scheduledDate: today, scheduledTime: null, tags: [], subtasks: [],
-      recurrence: { frequency: 'weekly', interval: 2, startsOn: today, endsOn: addDays(today, 45), weekdays: [weekday, (weekday + 2) % 7] },
-      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    render(<App/>);
-    await screen.findByRole('heading', { name: '这一周' });
-    fireEvent.click((await screen.findAllByRole('button', { name: '编辑任务：每周整理' }))[0]);
-    expect((screen.getByRole('radio', { name: '仅此周期' }) as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(screen.getByRole('radio', { name: '此周期及之后' }));
-    fireEvent.click(screen.getByText('更多设置'));
-    expect((screen.getByRole('combobox', { name: '重复规则' }) as HTMLSelectElement).value).toBe('weekly');
-    expect(screen.getByLabelText('重复间隔')).toHaveProperty('value', '2');
-    expect(screen.getByText(/每 2 周/)).toBeTruthy();
-    expect(document.querySelector('.todo-repeat-advanced')?.hasAttribute('open')).toBe(true);
-    const names = ['日', '一', '二', '三', '四', '五', '六'];
-    for (const day of [weekday, (weekday + 2) % 7]) expect(screen.getByRole('button', { name: `周${names[day]}` }).getAttribute('aria-pressed')).toBe('true');
-    expect((await todoRepository.listTasks()).find((item) => item.id === task.id)?.recurrence?.weekdays).toEqual([weekday, (weekday + 2) % 7]);
-  });
-
-  it('stops a recurring series from the selected cycle and keeps that cycle as a one-off task', async () => {
-    await todoRepository.saveTask({
-      title: '浇花', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [], subtasks: [],
-      recurrence: { frequency: 'daily', interval: 1, startsOn: todayKey(), endsOn: null, weekdays: [] },
-      recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('tab', { name: '今天' }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：浇花' }));
-    fireEvent.click(await screen.findByLabelText(/此周期及之后/));
-    fireEvent.click(screen.getByText('更多设置'));
-    fireEvent.change(screen.getByRole('combobox', { name: '重复规则' }), { target: { value: 'none' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    await screen.findByRole('button', { name: '编辑任务：浇花' });
-    const saved = (await todoRepository.listTasks())[0];
-    expect(saved.recurrence).toBeNull();
-    expect(saved.recurrenceHistory).toHaveLength(0);
-    expect((await todoRepository.listOccurrences())).toHaveLength(0);
-  });
-
-  it('asks before discarding an unsaved editor when the browser Back button is used', async () => {
-    await todoRepository.createQuickTask('暂存任务');
-    render(<App/>);
-    await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('button', { name: /收集箱/ }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：暂存任务' }));
-    fireEvent.change(await screen.findByLabelText('备注'), { target: { value: '还没保存' } });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    await browserHistoryBack(2);
-    expect(screen.getByRole('heading', { name: '编辑任务' })).toBeTruthy();
-    expect(confirm).toHaveBeenCalledOnce();
-    confirm.mockReturnValue(true);
-    await browserHistoryBack();
-    await waitFor(() => expect(screen.queryByRole('heading', { name: '编辑任务' })).toBeNull());
-    expect((await todoRepository.listTasks())[0].note).toBe('');
-  });
-
-  it('uses an explicit click to request notification permission and preserves the two-space demo', async () => {
+  it('keeps personal task data intact while opening and leaving the couple demo', async () => {
+    const task = await todoRepository.createQuickTask('只属于个人的任务', todayKey());
     mockViewportRects();
     render(<App/>);
-    await screen.findByRole('heading', { name: '这一周' });
+    await screen.findByRole('button', { name: '完成任务：只属于个人的任务' });
     await enterCouple();
     const firstCard = screen.getByRole('button', { name: /找一家喜欢的日料店/ });
     fireEvent.click(firstCard);
     expect(firstCard.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: '编辑：找一家喜欢的日料店' }));
-    await screen.findByRole('heading', { name: '编辑小事' });
-    await browserHistoryBack();
-    await screen.findByRole('region', { name: '我们的小事' });
     expect(screen.getByRole('button', { name: '返回个人待办' })).toBeTruthy();
-  });
-
-  it('keeps space ripple focus restoration and blocks rapid duplicate transitions', async () => {
-    mockViewportRects();
-    render(<App/>);
-    await screen.findByRole('heading', { name: '这一周' });
-    const sun = screen.getByRole('button', { name: '进入情侣专区' });
-    fireEvent.click(sun);
-    const ripple = screen.getByTestId('space-ripple');
-    expect(ripple.getAttribute('data-target-space')).toBe('couple');
-    expect(ripple.style.getPropertyValue('--ripple-x')).toBe('343px');
-    fireEvent.click(sun);
-    fireEvent.animationEnd(ripple);
-    await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-current-space')).toBe('couple'));
-    await waitFor(() => expect((document.activeElement as HTMLElement)?.getAttribute('aria-label')).toBe('返回个人待办'));
-    expect(screen.queryByTestId('space-ripple')).toBeNull();
+    expect((await todoRepository.listTasks()).map((record) => record.id)).toEqual([task.id]);
     fireEvent.click(screen.getByRole('button', { name: '返回个人待办' }));
-    const reverse = screen.getByTestId('space-ripple');
+    const reverse = await screen.findByTestId('space-ripple');
     fireEvent.animationEnd(reverse);
-    await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-current-space')).toBe('personal'));
+    expect(await screen.findByRole('button', { name: '完成任务：只属于个人的任务' })).toBeTruthy();
   });
 
-  it('closes quick capture before returning through historical and space layers', async () => {
-    mockViewportRects();
+  it('keeps Period, Anniversary, and Settings navigation available', async () => {
     render(<App/>);
     await screen.findByRole('region', { name: '待办' });
-    fireEvent.click(screen.getByRole('button', { name: '快速新增待办' }));
-    await screen.findByRole('dialog', { name: '快速记录' });
-    await browserHistoryBack();
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    await enterCouple();
-    fireEvent.click(screen.getByRole('button', { name: '查看已完成历史' }));
-    await screen.findByRole('heading', { name: '完成的时光' });
-    fireEvent.click(screen.getByRole('button', { name: '筛选时间范围' }));
-    await screen.findByRole('dialog', { name: '选择时间范围' });
-    await browserHistoryBack();
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('heading', { name: '完成的时光' })).toBeTruthy();
-    await browserHistoryBack();
-    await screen.findByRole('region', { name: '我们的小事' });
-    await browserHistoryBack();
-    await waitFor(() => expect(document.querySelector('.todo-module-root')?.getAttribute('data-current-space')).toBe('personal'));
-  });
-
-  it('respects reduced motion and keeps global module tabs outside Todo history', async () => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, media: '(prefers-reduced-motion: reduce)', onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() })));
-    render(<App/>);
-    await screen.findByRole('heading', { name: '这一周' });
-    const rootHistoryLength = history.length;
-    fireEvent.click(screen.getByRole('tab', { name: '今天' }));
-    fireEvent.click(screen.getByRole('tab', { name: '本月' }));
-    expect(history.length).toBe(rootHistoryLength);
-    const tabs = screen.getAllByRole('navigation', { name: '主要导航' })[0];
-    fireEvent.click(tabs.querySelectorAll('button')[1]);
+    const mainNavigation = screen.getAllByRole('navigation', { name: '主要导航' }).at(-1)!;
+    fireEvent.click(within(mainNavigation).getByRole('button', { name: '小月历' }));
     await screen.findByRole('region', { name: '小月历' });
-    fireEvent.click(tabs.querySelectorAll('button')[2]);
+    fireEvent.click(within(mainNavigation).getByRole('button', { name: '纪念日' }));
     await screen.findByRole('region', { name: '纪念日' });
-    fireEvent.click(tabs.querySelectorAll('button')[0]);
-    await screen.findByRole('region', { name: '待办' });
-    expect(history.length).toBe(rootHistoryLength);
+    fireEvent.click(screen.getByRole('button', { name: '打开设置' }));
+    expect(await screen.findByRole('region', { name: '设置' })).toBeTruthy();
   });
 });

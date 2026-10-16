@@ -405,3 +405,112 @@
   .todo-editor-more>summary{flex-wrap:wrap}
   .todo-editor-more>summary span{margin-left:0}
 }
+
+/* Minimal personal Todo */
+.todo-personal-minimal{max-width:760px;padding-bottom:122px}
+.todo-minimal-header{align-items:center;margin-bottom:20px}
+.todo-minimal-header h1{font-size:clamp(29px,4vw,38px);margin:7px 0 5px;letter-spacing:-.055em}
+.todo-minimal-header .todo-subtitle{font-size:12px}
+.todo-minimal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 18px}
+.todo-minimal-tabs{display:flex;gap:4px;padding:4px;border-radius:13px;background:#edf1f1}
+.todo-minimal-tabs button{min-width:62px;min-height:38px;padding:0 13px;border:0;border-radius:10px;background:transparent;color:#849194;font-size:13px}
+.todo-minimal-tabs button.selected{background:#fff;color:#526b74;font-weight:650;box-shadow:0 2px 8px #35474b12}
+.todo-minimal-date-navigation{display:flex;align-items:center;gap:5px}
+.todo-minimal-date-navigation>button:not(.todo-minimal-today){width:38px;height:38px;display:grid;place-items:center;padding:0;border:1px solid #dfe7e7;border-radius:11px;background:#fff;color:#70878d}
+.todo-minimal-date-navigation>button:not(.todo-minimal-today) svg{width:16px;height:16px}
+.todo-minimal-date-navigation .previous{transform:rotate(90deg)}
+.todo-minimal-date-navigation .next{transform:rotate(-90deg)}
+.todo-minimal-today{min-height:38px;padding:0 12px;border:1px solid #dfe7e7;border-radius:11px;background:#fff;color:#70878d;font-size:12px}
+.todo-minimal-today:hover{background:#edf2f3}
+.todo-minimal-task-area{min-height:180px;touch-action:pan-y;overscroll-behavior-y:contain}
+.todo-minimal-task-list{display:grid;gap:9px;min-width:0}
+.todo-minimal-task{display:flex;align-items:center;gap:12px;min-height:62px;padding:10px 12px;border:1px solid #e6ebea;border-radius:15px;background:#fff;box-shadow:0 3px 14px #374a4d05}
+.todo-minimal-check{width:25px;height:25px;display:grid;place-items:center;flex:none;padding:0;border:1.5px solid #bac9cb;border-radius:9px;background:#fff;color:transparent;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.todo-minimal-check svg{width:15px;height:15px}
+.todo-minimal-check.is-complete{border-color:#718b91;background:#718b91;color:#fff}
+.todo-minimal-check:active{transform:scale(.92)}
+.todo-minimal-task-title{display:block;flex:1;min-width:0;min-height:40px;padding:3px 0;border:0;background:transparent;color:#3e4d51;text-align:left;font-size:14px;line-height:1.5;overflow-wrap:anywhere;white-space:normal}
+.todo-minimal-task-title span{display:block;overflow-wrap:anywhere}
+.todo-minimal-edit{width:34px;height:40px;display:grid;place-items:center;flex:none;border:0;border-radius:10px;background:transparent;color:#93a1a3}
+.todo-minimal-edit svg{width:17px;height:17px;transform:rotate(0deg)}
+.todo-minimal-task-title:hover,.todo-minimal-edit:hover{color:#5c7a83}
+.todo-minimal-date-group{margin:0 0 19px}
+.todo-minimal-date-group h2{margin:0 0 8px;color:#899799;font-size:12px;font-weight:600;letter-spacing:.02em}
+.todo-minimal-empty{margin:14px 0;padding:22px 14px;border:1px dashed #e2e9e8;border-radius:14px;color:#9aa6a7;font-size:13px;text-align:center}
+.todo-minimal-completed{margin-top:24px;border:1px solid #e6ebea;border-radius:16px;background:#fff;overflow:hidden}
+.todo-minimal-completed-toggle{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;border:0;background:transparent;color:#59696c;text-align:left}
+.todo-minimal-completed-toggle>span{display:flex;align-items:center;gap:9px}
+.todo-minimal-completed-toggle strong{font-size:13px;font-weight:600}
+.todo-minimal-completed-toggle small{color:#9aa6a7;font-size:11px}
+.todo-minimal-completed-toggle>svg{width:17px;height:17px;color:#91a0a2;transition:transform .18s ease}
+.todo-minimal-completed-toggle>svg.is-open{transform:rotate(180deg)}
+.todo-minimal-completed-content{display:grid;gap:8px;padding:4px 12px 14px;border-top:1px solid #eff2f1}
+.todo-minimal-completed-content .todo-minimal-task{box-shadow:none}
+.todo-minimal-fab{position:fixed;z-index:12;right:max(28px,calc((100vw - 760px)/2 + 24px));bottom:28px;width:58px;height:58px;display:grid;place-items:center;border:0;border-radius:20px;background:#718b91;color:#fff;box-shadow:0 9px 24px #3c59612e;transition:transform .16s ease,background .16s ease}
+.todo-minimal-fab svg{width:24px;height:24px}
+.todo-minimal-fab:hover{background:#627d84;transform:translateY(-2px)}
+.todo-minimal-fab:active{transform:scale(.94)}
+.todo-undo-toast{position:fixed;z-index:90;left:50%;bottom:calc(92px + var(--safe-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:14px;max-width:calc(100vw - 28px);padding:10px 12px 10px 16px;border:1px solid #45575a;border-radius:13px;background:#3b4c50;color:#fff;box-shadow:0 8px 24px #24383b2c;font-size:12px}
+.todo-undo-toast span{max-width:min(58vw,330px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.todo-undo-toast button{min-width:48px;min-height:34px;padding:0 10px;border:0;border-radius:9px;background:#ffffff1a;color:#fff;font-weight:650}
+.todo-minimal-quick-backdrop{z-index:80;align-items:end;padding:0;background:#26343745;backdrop-filter:blur(2px)}
+.todo-minimal-quick-dialog{position:relative;width:min(560px,100%);max-height:min(88dvh,680px);overflow-y:auto;margin:0 auto;padding:28px 28px max(20px,var(--safe-bottom));border:1px solid #e5eae8;border-bottom:0;border-radius:24px 24px 0 0;background:#fbfcfb;box-shadow:0 -16px 60px #27383b24;animation:todo-minimal-sheet-in .22s ease both}
+.todo-minimal-quick-dialog .todo-dialog-close{top:16px;right:16px}
+.todo-minimal-quick-dialog h2{margin:10px 0 21px;color:#425155;font-size:24px;font-weight:550;letter-spacing:-.04em}
+.todo-minimal-quick-dialog .todo-form-field{margin-bottom:15px}
+.todo-minimal-quick-dialog .todo-form-field input{min-height:48px;font-size:16px}
+.todo-minimal-quick-dialog .todo-dialog-actions{margin-top:20px;padding-top:15px;border-top:1px solid #edf0ef}
+.todo-minimal-quick-dialog .todo-primary-button{min-width:88px;min-height:42px;margin-top:0}
+.todo-minimal-editor-backdrop{position:fixed;z-index:85;inset:0;display:flex;align-items:end;justify-content:center;padding:0;background:#26343745;backdrop-filter:blur(2px)}
+.todo-minimal-editor{width:min(560px,100%);max-height:min(82dvh,680px);display:flex;flex-direction:column;overflow:hidden;margin:0 auto;border:1px solid #e5eae8;border-bottom:0;border-radius:24px 24px 0 0;background:#fbfcfb;box-shadow:0 -16px 60px #27383b24;animation:todo-minimal-sheet-in .22s ease both}
+.todo-minimal-editor>header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 22px 14px;border-bottom:1px solid #edf0ef}
+.todo-minimal-editor>header h2{margin:5px 0 0;color:#425155;font-size:22px;font-weight:550}
+.todo-minimal-editor>header button{width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:11px;background:#eff3f2;color:#829194}
+.todo-minimal-editor>header button svg{width:18px;height:18px}
+.todo-minimal-editor-fields{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 22px 8px}
+.todo-minimal-editor-fields .todo-form-field{margin-bottom:17px}
+.todo-minimal-editor-fields input{min-height:46px;font-size:16px}
+.todo-minimal-error{margin:0 0 12px;color:#a45c56;font-size:12px}
+.todo-minimal-editor>footer{padding:12px 22px max(16px,var(--safe-bottom));border-top:1px solid #edf0ef;background:#fbfcfb}
+.todo-minimal-editor-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px}
+.todo-minimal-editor-actions button,.todo-minimal-delete-confirm button{min-height:42px;padding:0 14px;border:1px solid #e1e8e7;border-radius:10px;background:#fff;color:#718185;font-size:12px}
+.todo-minimal-editor-actions .todo-primary-button{margin:0;border:0;background:#718b91;color:#fff}
+.todo-minimal-editor-actions .todo-minimal-delete-trigger{margin-right:auto;border-color:#eedbd8;color:#a77973}
+.todo-minimal-delete-confirm{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.todo-minimal-delete-confirm p{flex:1 0 100%;margin:0 0 3px;color:#8f7773;font-size:11px;line-height:1.5}
+.todo-minimal-delete-confirm .danger{border-color:#dcaca5;background:#a9635c;color:#fff}
+@keyframes todo-minimal-sheet-in{from{opacity:.65;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.todo-minimal-quick-dialog,.todo-minimal-editor{animation:none}}
+
+@media(max-width:700px){
+  .todo-personal-minimal{padding-bottom:128px}
+  .todo-minimal-header{margin-bottom:18px}
+  .todo-minimal-header h1{font-size:31px}
+  .todo-minimal-toolbar{margin-bottom:15px}
+  .todo-minimal-task-area{min-height:160px}
+  .todo-minimal-task{min-height:60px;gap:10px;padding:9px 10px}
+  .todo-minimal-task-title{font-size:14px}
+  .todo-minimal-fab{right:20px;bottom:calc(82px + var(--safe-bottom) + 14px);width:56px;height:56px;border-radius:19px}
+  .todo-undo-toast{bottom:calc(92px + var(--safe-bottom));font-size:11px}
+  .todo-minimal-quick-backdrop{padding:var(--safe-top) 0 0}
+  .todo-minimal-quick-dialog{width:100%;max-height:calc(100dvh - var(--safe-top));padding:25px 20px max(16px,var(--safe-bottom));border-radius:23px 23px 0 0}
+  .todo-minimal-editor-backdrop{padding:var(--safe-top) 0 0}
+  .todo-minimal-editor{max-height:calc(100dvh - var(--safe-top));border-radius:23px 23px 0 0}
+  .todo-minimal-editor>header{padding:17px 18px 13px}
+  .todo-minimal-editor-fields{padding:15px 18px 6px}
+  .todo-minimal-editor>footer{padding:10px 18px max(14px,var(--safe-bottom))}
+}
+@media(max-width:360px){
+  .todo-minimal-toolbar{gap:6px}
+  .todo-minimal-tabs button{min-width:54px;padding:0 9px}
+  .todo-minimal-date-navigation{gap:3px}
+  .todo-minimal-date-navigation>button:not(.todo-minimal-today){width:32px;height:32px}
+  .todo-minimal-today{min-height:32px;padding:0 8px}
+}
+@media(max-width:360px){
+  .todo-minimal-header h1{font-size:28px}
+  .todo-minimal-tabs button{min-width:56px;padding:0 10px}
+  .todo-minimal-task{gap:8px;padding:8px}
+  .todo-minimal-edit{width:30px}
+  .todo-minimal-completed-toggle{padding:0 12px}
+}
