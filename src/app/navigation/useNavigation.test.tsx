@@ -139,3 +139,36 @@ describe('web navigation layers', () => {
     expect(history.length).toBe(rootLength);
   });
 });
+
+
+describe('Period navigation', () => {
+  beforeEach(() => {
+    native.platform = false;
+    history.replaceState(null, '');
+  });
+
+  it('returns overlays and subpages through unified browser history and restores the Period screen after tab switches', async () => {
+    const { result } = renderHook(() => useNavigation('period', () => undefined));
+    const waitPeriodState = (matches: (snapshot: typeof result.current.snapshot) => boolean) => waitFor(() => expect(matches(result.current.snapshot)).toBe(true));
+    await waitFor(() => expect((history.state as { depth: number }).depth).toBe(0));
+
+    act(() => result.current.showPeriodScreen('stats'));
+    await waitPeriodState((state) => state.module === 'period' && state.periodScreen === 'stats');
+    act(() => result.current.showSurface('period-dialog'));
+    await waitPeriodState((state) => state.surfaces.at(-1) === 'period-dialog');
+
+    act(() => { void result.current.back(); });
+    await waitPeriodState((state) => state.periodScreen === 'stats' && state.surfaces.length === 0);
+    act(() => { void result.current.back(); });
+    await waitPeriodState((state) => state.periodScreen === 'calendar');
+
+    act(() => result.current.showPeriodScreen('settings'));
+    await waitPeriodState((state) => state.periodScreen === 'settings');
+    act(() => result.current.selectModule('todo'));
+    await waitPeriodState((state) => state.module === 'todo');
+    act(() => result.current.selectModule('period'));
+    await waitPeriodState((state) => state.module === 'period' && state.periodScreen === 'settings');
+    act(() => { void result.current.back(); });
+    await waitPeriodState((state) => state.periodScreen === 'calendar');
+  });
+});

@@ -20,7 +20,17 @@ Life Space 是 React 19、TypeScript、Vite 和 Capacitor 7 构建的个人生�
 
 目前数据仅保存在当前设备，跨设备同步未配置、未启用。`supabase/migrations/202610160001_couple_todo.sql` 和 `CoupleTodoRepository` 接口为后续认证共享准备了成员上限、一次性邀请、RLS 与版本冲突控制；应用没有 Supabase 项目 URL 或客户端密钥，也没有远程同步适配器。不得将本机保存状态描述为同步。
 
-情侣数据使用独立的 `coupleItems`、`coupleTags` stores；升级会保留现有 `todoTasks`、`todoTags`、`todoOccurrences`。Period、Anniversary 与个人待办继续使用原有模块和数据路径。
+情侣数据使用独立的 `coupleItems`、`coupleTags` stores；升级会保留现有 `todoTasks`、`todoTags`、`todoOccurrences`。
+
+## Phase 3A：小月历
+
+小月历使用 `life-space` IndexedDB v5 中独立的 `periodRecords`、`periodSettings` stores。v4 升级只新增这两个 store，不清空或改写个人待办、情侣待办、全局设置或模块状态。实际与预测经期使用不同颜色；页面支持按月浏览、触屏横向轻扫、日期详情、开始/结束/撤销、历史补录与编辑删除、真实记录统计、周期参数、关怀备忘、提醒、Period 页面 PIN 和加密备份。
+
+从旧小月历迁入时，先在旧小月历导出加密 `.xyl` 文件，再在 Life Space 的“小月历设置 → 从旧小月历导入”选择文件并输入备份密码。解密通过后先显示记录数量和日期范围；如果本机已有小月历内容，确认前请先导出当前备份，并再次确认替换。导入只替换 Period 数据，不会读取旧网站、合并重复记录或修改其他空间。旧站点与 Life Space 是不同 origin，不能自动读取旧站 IndexedDB；迁移必须由用户主动选择 `.xyl` 文件。
+
+Period 内容仅存于当前设备的 `periodRecords`、`periodSettings` stores。PIN 只遮挡 Period 页面，不加密设备数据库；旧版 `.xyl` 格式本身不包含 PIN，导入会保留当前 Life Space 的 PIN。加密备份使用旧版兼容的 PBKDF2-SHA-256（250,000 次）和 AES-GCM-256；不提供明文导出。浏览器提醒仅在用户授权且小月历打开时尝试，网页关闭或系统挂起时不保证送达。数据格式、导入步骤、兼容差异和人工验收清单见 [docs/period-integration.md](docs/period-integration.md)。
+
+Anniversary 仍是后续 Phase 3B 的独立范围，本阶段不实现或改动其业务功能。
 
 ## 预览与部署
 

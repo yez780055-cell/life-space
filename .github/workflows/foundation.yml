@@ -50,6 +50,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: todo-phase-2b-browser-screenshots
+          name: life-space-phase-3a-browser-screenshots
           path: docs/screenshots/
           if-no-files-found: ignore
