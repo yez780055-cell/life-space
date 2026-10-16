@@ -7,7 +7,7 @@
 - `npm run verify:browser`：Windows Chromium 生产预览桌面和触控流程通过。Period 覆盖今日开始/撤销/开始日取消及撤销、历史补录、统计和记录编辑、跳转到 1900 年后仍能选择当前年份、Period PIN 在切换模块和页面进入后台时重新遮挡、忘记 PIN 后仅清除 Period、加密导出、错误密码不写入、预览后确认替换、恢复后刷新持久化，以及导入/清除前后设置、Todo、Couple stores 完全一致。
 - 移动端覆盖 320、360、390、430px，320px 增大文字，日期选择、月历横向切换、纵向手势不切月/不改日期详情，以及 320px 短视口的 Period 导入弹层滚动和底部留白。PWA manifest、Service Worker 控制状态、scope 和 start URL 与预览路径一致；离线刷新后 Todo 可打开，Period 锁屏也可访问。
 - 浏览器流程仅使用隔离 Chromium profile、合成记录和合成 `.xyl`；截图写入忽略目录 `.artifacts/browser-preview`。未读取真人 Period 数据。
-- Android 真机返回键、系统软键盘、安全区实际 inset 与通知触发时机未在实体设备验收；见 [Phase 3A 验收清单](period-integration.md)。首次 PR CI run `38881361424` 的 typecheck/lint 通过，测试在 Todo 快速添加用例中因先观察到 IndexedDB 写入、早于输入框 React 清空状态而失败；测试现等待输入框清空，完整本地检查和浏览器流程通过，修正后的 CI 将随本次更新重跑。
+- Android 真机返回键、系统软键盘、安全区实际 inset 与通知触发时机未在实体设备验收；见 [Phase 3A 验收清单](period-integration.md)。首次 PR CI run `38881361424` 的 typecheck/lint 通过，测试在 Todo 快速添加用例中因先观察到 IndexedDB 写入、早于输入框 React 清空状态而失败；测试现等待输入框清空。修正后 CI run `38889098767` 的 typecheck、lint、98 项测试、构建和桌面/手机浏览器检查全部通过。
 
 ## Phase 2C 手机交互与视觉验收修复（2026-10-16）
 
