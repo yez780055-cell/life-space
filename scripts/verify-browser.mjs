@@ -62,6 +62,14 @@ async function waitForTodoData(page) {
   await page.waitForFunction(() => document.querySelector('.todo-module-root')?.getAttribute('data-loading') === 'false');
 }
 
+async function waitForTodoTaskCompletion(page, title, completed) {
+  await page.waitForFunction(async ({ taskTitle, expectedCompleted }) => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => { const task = request.result.find((record) => record.title === taskTitle); resolve(task && (expectedCompleted ? typeof task.completedAt === 'number' : task.completedAt === null)); }; request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  }, { taskTitle: title, expectedCompleted: completed });
+}
+
 async function readPeriodRecords(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -361,6 +369,7 @@ try {
   await page.getByRole('button', { name: '恢复任务：浏览日期任务' }).waitFor();
   await page.getByRole('button', { name: '恢复任务：浏览日期任务' }).click();
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  await waitForTodoTaskCompletion(page, '浏览日期任务', false);
   await page.reload();
   await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await page.getByRole('button', { name: '全部' }).click();
@@ -982,6 +991,7 @@ try {
     if (!completedCheckBox || completedCheckBox.width < 44 || completedCheckBox.height < 44 || !completedMark || completedMark.width > 26 || completedMark.height > 26 || completedMark.width !== pendingMark.width || completedMark.height !== pendingMark.height || outerBackground !== 'rgba(0, 0, 0, 0)' && outerBackground !== 'transparent') throw new Error(`Completed checkbox does not match the pending mark at ${width}px: ${JSON.stringify({ pendingMark, completedCheckBox, completedMark, outerBackground })}`);
     await mobilePage.getByRole('button', { name: '恢复任务：手机上的任务' }).tap();
     await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
+    await waitForTodoTaskCompletion(mobilePage, '手机上的任务', false);
     if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.tap();
     if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > width) throw new Error(`Personal Todo overflows after restore at ${width}px`);
   }
