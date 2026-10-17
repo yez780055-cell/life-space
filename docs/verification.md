@@ -88,5 +88,5 @@ Pages 只有一个站点：推送 `feat/todo-phase-2b` 会替换此开发预览�
 - `npm run verify:browser`：本机生产预览通过；覆盖现有 Todo、Couple、Period 回归，纪念日创建/编辑/删除、节点排序去重/删除/开关/刷新、未来日期与周年/仅一次、数据隔离，手机 320、360、390、430px，多节点 chip 换行、较大文字、短视口数字输入和 PWA manifest/Service Worker 控制状态。截图保存在忽略目录 `.artifacts/browser-preview`。
 - 浏览器验证使用本机 `http://127.0.0.1:4190/` 预览。此次预览 scope 与 manifest 一致；GitHub Pages `/life-space/` 子路径由 PR CI 验证。
 - 天数节点域测试还在 `America/Los_Angeles` 时区运行，覆盖 2026 年春季与秋季 DST 切换日期；天数计算保持不受时区影响。
-- GitHub Actions：Phase 3B 的本地功能改动推送后补记最新 workflow run 和状态。
+- GitHub Actions：[Foundation Web checks 运行 #39](https://github.com/yez780055-cell/life-space/actions/runs/38999261331)：对包含自定义天数节点的提交 `5a3cd562dddd0967d5941f6bbd922ebac36a8e63` 全部通过；TypeScript、ESLint、20 个测试文件、production build、Chromium 桌面/手机浏览器步骤和截图归档均成功。
 - Android 真机系统返回、软键盘遮挡与安全区 inset 尚待人工验收；本阶段不构建 APK。
