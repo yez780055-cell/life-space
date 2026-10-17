@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react';
 
-type IconName = 'todo' | 'period' | 'anniversary' | 'settings' | 'arrow' | 'close' | 'spark' | 'sun' | 'heart' | 'plus' | 'inbox' | 'chevron' | 'check' | 'clock' | 'calendar' | 'tag' | 'filter' | 'history' | 'repeat' | 'bell' | 'note' | 'subtask';
+type IconName = 'todo' | 'period' | 'anniversary' | 'settings' | 'arrow' | 'close' | 'spark' | 'sun' | 'heart' | 'plus' | 'inbox' | 'chevron' | 'check' | 'clock' | 'calendar' | 'tag' | 'filter' | 'history' | 'repeat' | 'bell' | 'note';
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {
   const paths: Record<IconName, React.ReactNode> = {
     todo: <><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12 2.4 2.4L16 9"/></>,
@@ -24,7 +24,6 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconN
     repeat: <><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></>,
     bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4"/></>,
     note: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8m-8 4h8"/></>,
-    subtask: <><rect x="4" y="4" width="6" height="6" rx="1.5"/><path d="m5.5 7 1.2 1.2L9 5.8M13 6h7m-7 5h7m-16 5h16m-16 4h16"/></>
   };
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]}</svg>;
 }

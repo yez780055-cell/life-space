@@ -1,0 +1,137 @@
+/* Personal Todo mobile feed: date sections hold compact, separated task rows. */
+.todo-personal-minimal{max-width:850px;padding-bottom:calc(118px + var(--safe-bottom))}
+.todo-personal-minimal .todo-minimal-header{align-items:flex-start;margin-bottom:13px}
+.todo-personal-minimal .todo-minimal-heading{min-width:0;flex:1}
+.todo-personal-minimal .todo-minimal-header h1{margin:0 0 5px;font-size:clamp(26px,4vw,30px);font-weight:600;letter-spacing:-.045em;line-height:1.2}
+.todo-personal-minimal .todo-minimal-summary{display:flex;align-items:center;gap:7px;min-height:19px;margin:0;color:#839197;font-size:12px;line-height:1.4}
+.todo-personal-minimal .todo-minimal-summary strong{color:#647b83;font-weight:600}
+.todo-personal-minimal .todo-minimal-summary time{font-variant-numeric:tabular-nums}
+.todo-personal-minimal .todo-space-toggle{width:44px;height:44px;border-radius:14px}
+.todo-personal-minimal .todo-minimal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;margin:0 0 12px}
+.todo-personal-minimal .todo-minimal-tabs{flex:none}
+.todo-personal-minimal .todo-minimal-tabs{gap:3px;padding:3px;border-radius:999px;background:#eaf0f1}
+.todo-personal-minimal .todo-minimal-tabs button{min-width:70px;min-height:34px;padding:0 13px;border:0;border-radius:999px;background:transparent;color:#7f9095;font-size:12px;line-height:1.2;transition:background .16s ease,color .16s ease,box-shadow .16s ease}
+.todo-personal-minimal .todo-minimal-tabs button.selected{background:#dce8eb;color:#4f7581;font-weight:650;box-shadow:0 1px 4px #49636c12}
+.todo-personal-minimal .todo-minimal-date-navigation{display:flex;align-items:center;gap:2px}
+.todo-personal-minimal .todo-minimal-date-navigation>button:not(.todo-minimal-today){width:34px;height:34px;display:grid;place-items:center;padding:0;border:0;border-radius:10px;background:transparent;color:#83959a}
+.todo-personal-minimal .todo-minimal-date-navigation>button:not(.todo-minimal-today) svg{width:16px;height:16px}
+.todo-personal-minimal .todo-minimal-date-navigation .previous{transform:rotate(90deg)}
+.todo-personal-minimal .todo-minimal-date-navigation .next{transform:rotate(-90deg)}
+.todo-personal-minimal .todo-minimal-today{min-height:32px;padding:0 9px;border:1px solid #dce5e7;border-radius:10px;background:#f9fbfb;color:#69838b;font-size:11px}
+.todo-personal-minimal .todo-minimal-date-navigation{justify-content:flex-end;gap:2px;margin:0 0 8px}
+.todo-personal-minimal .todo-minimal-completed-toggle{width:auto;min-width:0;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:3px;flex:none;padding:0 5px;border:0;border-radius:9px;background:transparent;color:#617a82;font-size:11px;font-weight:600;white-space:nowrap}
+.todo-personal-minimal .todo-minimal-completed-toggle>svg{width:15px;height:15px;transform:rotate(0);color:#84969b;transition:transform .18s ease}
+.todo-personal-minimal .todo-minimal-completed-toggle>svg.is-open{transform:rotate(180deg)}
+.todo-personal-minimal .todo-minimal-completed-toggle:hover{background:#edf2f3}
+.todo-personal-minimal .todo-minimal-task-area{min-height:150px;touch-action:pan-y;overscroll-behavior-y:contain}
+.todo-personal-minimal .todo-minimal-date-group{min-width:0;margin:0 0 18px}
+.todo-personal-minimal .todo-minimal-date-group h2{margin:0 0 8px;color:#54727c;font-size:15px;font-weight:620;letter-spacing:-.015em;line-height:1.4}
+.todo-personal-minimal .todo-minimal-task-list{display:block;min-width:0;overflow:hidden;border:1px solid #e7ecec;border-radius:17px;background:#fff;box-shadow:none}
+.todo-personal-minimal .todo-minimal-task{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:0;min-height:60px;padding:5px 8px 5px 3px;border:0;border-bottom:1px solid #edf0f0;border-radius:0;background:transparent;box-shadow:none}
+.todo-personal-minimal .todo-minimal-task:last-child{border-bottom:0}
+.todo-personal-minimal .todo-minimal-check{width:44px;height:44px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:transparent;color:#fff;flex:none;transition:transform .16s ease}
+.todo-personal-minimal .todo-minimal-task .todo-minimal-check.is-complete{border:0;border-radius:50%;background:transparent;color:transparent}
+.todo-personal-minimal .todo-minimal-check-mark{width:23px;height:23px;display:grid;place-items:center;border:1.5px solid #a8bbc0;border-radius:8px;background:#fff;color:transparent;transition:background .16s ease,border-color .16s ease}
+.todo-personal-minimal .todo-minimal-check-mark svg{width:15px;height:15px}
+.todo-personal-minimal .todo-minimal-check.is-complete .todo-minimal-check-mark{border-color:#718f99;background:#718f99;color:#fff}
+.todo-personal-minimal .todo-minimal-check:active{transform:scale(.93)}
+.todo-personal-minimal .todo-minimal-row-copy{min-width:0}
+.todo-personal-minimal .todo-minimal-title-line{display:flex;align-items:center;gap:2px;min-width:0}
+.todo-personal-minimal .todo-minimal-task-title{display:block;flex:1;min-width:0;min-height:34px;padding:4px 0;border:0;background:transparent;color:#34464d;text-align:left;font-size:15px;font-weight:540;line-height:1.4;overflow-wrap:anywhere;white-space:normal}
+.todo-personal-minimal .todo-minimal-task-title span{display:-webkit-box;overflow:hidden;overflow-wrap:anywhere;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.todo-personal-minimal .todo-minimal-edit{width:30px;height:34px;display:grid;place-items:center;flex:none;border:0;border-radius:8px;background:transparent;color:#90a0a3}
+.todo-personal-minimal .todo-minimal-edit svg{width:16px;height:16px;transform:rotate(-90deg)}
+.todo-personal-minimal .todo-minimal-restore{min-height:30px;flex:none;padding:0 9px;border:0;border-radius:9px;background:#edf4f5;color:#5c7d86;font-size:11px;font-weight:600}
+.todo-personal-minimal .todo-minimal-restore:hover{background:#e3edef}
+.todo-personal-minimal .todo-minimal-task-meta{display:flex;align-items:center;gap:6px;min-width:0;min-height:18px;padding:0 0 2px;color:#7f9094;font-size:11px;line-height:1.35;overflow:hidden}
+.todo-personal-minimal .todo-minimal-time{display:inline-flex;align-items:center;gap:3px;flex:none;color:#557887;font-variant-numeric:tabular-nums}
+.todo-personal-minimal .todo-minimal-time svg{width:13px;height:13px}
+.todo-personal-minimal .todo-minimal-tag{max-width:32%;overflow:hidden;padding:3px 7px;border-radius:999px;background:#edf4f6;color:#597b86;text-overflow:ellipsis;white-space:nowrap}
+.todo-personal-minimal .todo-minimal-more-tags{background:#f1f3f3;color:#839196}
+.todo-personal-minimal .todo-minimal-task.is-complete .todo-minimal-task-title{color:#879395;font-size:14px;font-weight:450}
+.todo-personal-minimal .todo-minimal-task.is-complete .todo-minimal-task-meta{opacity:.78}
+.todo-personal-minimal .todo-minimal-empty{margin:9px 0 18px;padding:18px 10px;border:0;border-radius:0;background:transparent;color:#859398;font-size:13px;text-align:center}
+.todo-personal-minimal .todo-minimal-completed{margin-top:14px;padding-top:10px;border:0;border-top:1px solid #e8eded;border-radius:0;background:transparent;overflow:visible}
+.todo-personal-minimal .todo-minimal-completed-heading{margin:0 4px 8px;color:#5d7278;font-size:15px;font-weight:620}
+.todo-personal-minimal .todo-minimal-completed-content{display:grid;gap:8px;padding:0 0 12px;border:0}
+.todo-personal-minimal .todo-minimal-completed-content .todo-minimal-task-list{box-shadow:none}
+.todo-personal-minimal .todo-minimal-fab{right:max(20px,calc((100vw - 760px)/2 + 20px));bottom:calc(20px + var(--safe-bottom));width:52px;height:52px;border-radius:18px;background:#718f99;box-shadow:0 6px 16px #3c59611e}
+.todo-personal-minimal .todo-minimal-fab svg{width:22px;height:22px}
+.todo-personal-minimal .todo-minimal-fab:hover{background:#627f89}
+
+/* Personal task editor uses native-feeling rows while keeping existing task data editable. */
+.todo-minimal-editor-backdrop{align-items:flex-end;padding:var(--safe-top) 0 0}
+.todo-minimal-editor{width:min(560px,100%);max-height:calc(100dvh - var(--safe-top));border:1px solid #e5ebeb;border-bottom:0;border-radius:23px 23px 0 0;background:#fbfcfc;box-shadow:0 -12px 44px #27383b1c}
+.todo-minimal-editor>header{display:grid;grid-template-columns:42px minmax(0,1fr) 52px;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #edf1f1}
+.todo-minimal-editor>header h2{margin:0;color:#33474e;font-size:16px;font-weight:620;text-align:center;letter-spacing:-.02em}
+.todo-minimal-editor>header .todo-minimal-editor-back,.todo-minimal-editor>header .todo-minimal-editor-delete{width:auto;height:40px;display:grid;place-items:center;padding:0 8px;border:0;border-radius:11px;background:transparent;color:#74878c;font-size:12px}
+.todo-minimal-editor>header .todo-minimal-editor-back{width:40px;background:#eef2f2}
+.todo-minimal-editor>header .todo-minimal-editor-back svg{width:18px;height:18px}
+.todo-minimal-editor>header .todo-minimal-editor-delete{color:#c36f71}
+.todo-minimal-editor-fields{display:grid;gap:12px;min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px 18px;scrollbar-gutter:stable}
+.todo-minimal-title-editor{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:8px;min-height:64px;padding:8px 12px;border:1px solid #edf0f0;border-radius:16px;background:#fff}
+.todo-minimal-title-editor-check{width:26px;height:26px;display:grid;place-items:center;border:1.5px solid #b9c7c9;border-radius:8px;color:#fff}
+.todo-minimal-title-editor-check svg{width:17px;height:17px}
+.todo-minimal-title-editor input{width:100%;min-width:0;min-height:42px;padding:5px 0;border:0;outline:none;background:transparent;color:#34464d;font:inherit;font-size:17px;font-weight:580;line-height:1.35}
+.todo-minimal-editor-section{min-width:0;padding:12px 14px;border:1px solid #edf0f0;border-radius:16px;background:#fff}
+.todo-minimal-editor-properties{padding-top:3px;padding-bottom:3px}
+.todo-minimal-setting-row{display:grid;grid-template-columns:74px minmax(0,1fr);align-items:center;gap:10px;min-height:48px;margin:0;border-bottom:1px solid #eef1f1;color:#718186;font-size:12px}
+.todo-minimal-setting-row:last-child{border-bottom:0}
+.todo-minimal-setting-row>span{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.todo-minimal-setting-row>span svg{width:16px;height:16px;flex:none;color:#91a0a3}
+.todo-minimal-setting-row>input{width:100%;min-width:0;min-height:38px;padding:0;border:0;background:transparent;color:#557785;font:inherit;font-size:13px;text-align:right}
+.todo-minimal-setting-row>input:focus,.todo-minimal-setting-row select:focus{outline:2px solid #cfdee1;outline-offset:2px;border-radius:5px}
+.todo-minimal-setting-row>input:disabled{color:#adb7b8}
+.todo-minimal-tag-row{display:block;padding:10px 0 11px}
+.todo-minimal-tag-row>span{margin-bottom:9px}
+.todo-minimal-tag-options{display:flex;flex-wrap:wrap;gap:6px}
+.todo-minimal-tag-options button{min-height:30px;max-width:100%;overflow:hidden;padding:4px 9px;border:1px solid #e6ecec;border-radius:999px;background:#fafcfc;color:#7f9094;font:inherit;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.todo-minimal-tag-options button.selected{border-color:#d8e7ea;background:#edf5f6;color:#527681}
+.todo-minimal-tag-options button.is-new{border-style:dashed}
+.todo-minimal-tag-options small{color:#9aa6a8;font-size:11px}
+.todo-minimal-add-tag{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin-top:9px}
+.todo-minimal-add-tag input{width:100%;min-width:0;min-height:36px;padding:7px 9px;border:1px solid #edf0f0;border-radius:9px;background:#fbfcfc;color:#455a60;font:inherit;font-size:12px}
+.todo-minimal-add-tag button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:0 10px;border:0;border-radius:9px;background:#edf2f3;color:#5f7f89;font:inherit;font-size:11px}
+.todo-minimal-add-tag button:disabled{opacity:.5}
+.todo-minimal-reminder-row>div{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.todo-minimal-reminder-row select{max-width:100%;min-width:0;padding:5px 4px;border:0;background:transparent;color:#557785;font:inherit;font-size:12px;text-align:right}
+.todo-minimal-reminder-row button{min-width:58px;min-height:30px;padding:0 7px;border:1px solid #e7eeee;border-radius:9px;background:#f8fafa;color:#819196;font:inherit;font-size:10px;white-space:nowrap}
+.todo-minimal-reminder-row button[aria-pressed="true"]{border-color:#d5e5e8;background:#edf5f6;color:#527681}
+.todo-minimal-reminder-row button:disabled,.todo-minimal-reminder-row select:disabled{opacity:.55}
+.todo-minimal-note-editor label{display:grid;gap:8px;color:#4f646b;font-size:13px;font-weight:580}
+.todo-minimal-note-editor textarea{width:100%;min-height:78px;resize:vertical;padding:10px;border:1px solid #edf0f0;border-radius:11px;background:#fbfcfc;color:#455a60;font:inherit;font-size:13px;line-height:1.5}
+.todo-minimal-note-editor textarea::placeholder{color:#aab3b4}
+.todo-minimal-delete-confirm{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;margin:0;padding:11px;border:1px solid #f0dedd;border-radius:13px;background:#fff9f8}
+.todo-minimal-delete-confirm p{grid-column:1/-1;margin:0;color:#986e6d;font-size:11px;line-height:1.5}
+.todo-minimal-delete-confirm button{min-height:34px;padding:0 9px;border:1px solid #eadfdf;border-radius:9px;background:#fff;color:#8b7b7b;font-size:11px}
+.todo-minimal-delete-confirm .danger{border-color:#d6a09c;background:#ae6661;color:#fff}
+.todo-minimal-error{margin:0;color:#a45c56;font-size:12px;line-height:1.5}
+.todo-minimal-editor>footer{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:10px 16px max(14px,var(--safe-bottom));border-top:1px solid #edf0f0;background:#fbfcfc}
+.todo-minimal-editor>footer button{min-height:44px;border:1px solid #e3eaea;border-radius:12px;background:#f3f6f6;color:#60747a;font-size:13px}
+.todo-minimal-editor>footer .todo-primary-button{margin:0;border:0;background:#718f99;color:#fff;font-weight:620}
+.todo-minimal-editor>footer button:disabled{opacity:.55}
+@media(max-width:700px){
+  .todo-personal-minimal{padding-bottom:calc(128px + var(--safe-bottom))}
+  .todo-personal-minimal .todo-minimal-header{margin-bottom:11px}
+  .todo-personal-minimal .todo-minimal-toolbar{margin-bottom:14px}
+  .todo-personal-minimal .todo-minimal-task-area{min-height:145px}
+  .todo-personal-minimal .todo-minimal-task{min-height:58px;padding-right:6px}
+  .todo-personal-minimal .todo-minimal-task-title{font-size:14px}
+  .todo-personal-minimal .todo-minimal-fab{right:18px;bottom:calc(82px + var(--safe-bottom) + 12px);width:52px;height:52px;border-radius:18px}
+  .todo-minimal-editor{width:100%;max-height:calc(100dvh - var(--safe-top));border-radius:22px 22px 0 0}
+  .todo-minimal-editor>header{padding:10px 14px}
+  .todo-minimal-editor-fields{gap:10px;padding:11px 13px 15px}
+  .todo-minimal-editor>footer{padding:9px 13px max(12px,var(--safe-bottom))}
+}
+@media(max-width:360px){
+  .todo-personal-minimal .todo-minimal-summary{gap:5px;font-size:11px}
+  .todo-personal-minimal .todo-minimal-tabs button{min-width:62px;padding:0 10px}
+  .todo-personal-minimal .todo-minimal-task{grid-template-columns:44px minmax(0,1fr);padding-left:2px}
+  .todo-personal-minimal .todo-minimal-check{width:44px;height:44px}
+  .todo-personal-minimal .todo-minimal-task-title{font-size:13px}
+  .todo-personal-minimal .todo-minimal-task-meta{gap:4px;font-size:10px}
+  .todo-personal-minimal .todo-minimal-tag{max-width:29%;padding:3px 6px}
+  .todo-minimal-setting-row{grid-template-columns:65px minmax(0,1fr);gap:6px}
+  .todo-minimal-reminder-row>div{gap:4px}
+  .todo-minimal-reminder-row select{font-size:11px}
+}

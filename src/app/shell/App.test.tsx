@@ -45,7 +45,7 @@ describe('application navigation', () => {
     await screen.findByRole('region', { name: '待办' });
     await screen.findByRole('button', { name: '编辑任务：编辑验证任务' });
     fireEvent.click(await screen.findByRole('button', { name: '编辑任务：编辑验证任务' }));
-    const editor = await screen.findByRole('dialog', { name: '编辑待办' });
+    const editor = await screen.findByRole('dialog', { name: '编辑任务' });
     const editorClose = editor.querySelector('header button') as HTMLButtonElement;
     const editorSave = within(editor).getByRole('button', { name: '保存' });
     expect(document.activeElement).toBe(within(editor).getByRole('textbox', { name: '任务内容' }));
@@ -56,7 +56,7 @@ describe('application navigation', () => {
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(document.activeElement).toBe(editorClose);
     fireEvent.keyDown(document, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑待办' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
     await screen.findByRole('button', { name: '完成任务：编辑验证任务' });
     fireEvent.click(screen.getAllByRole('button', { name: '打开设置' })[0]);
     await screen.findByRole('region', { name: '设置' });
@@ -74,9 +74,9 @@ describe('application navigation', () => {
     render(<App/>);
     await screen.findByRole('region', { name: '待办' });
     fireEvent.click(await screen.findByRole('button', { name: '编辑任务：跨模块验证任务' }));
-    await screen.findByRole('heading', { name: '编辑待办' });
-    fireEvent.click(within(screen.getByRole('dialog', { name: '编辑待办' })).getByRole('button', { name: '取消' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑待办' })).toBeNull());
+    await screen.findByRole('heading', { name: '编辑任务' });
+    fireEvent.click(within(screen.getByRole('dialog', { name: '编辑任务' })).getByRole('button', { name: '取消' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
     await screen.findByRole('button', { name: '完成任务：跨模块验证任务' });
     const globalNavigation = screen.getAllByRole('navigation', { name: '主要导航' }).at(-1)!;
     fireEvent.click(within(globalNavigation).getByRole('button', { name: '小月历' }));
