@@ -60,6 +60,7 @@ export const todoRepository = {
       const existingRequest = draft.id ? store.get(draft.id) : undefined;
       const save = (existing?: PersonalTask) => {
         const id = draft.id ?? newId();
+        const subtasksUnchanged = Boolean(existing) && JSON.stringify(draft.subtasks) === JSON.stringify(existing?.subtasks ?? []);
         const recurrenceHistory = [...(existing?.recurrenceHistory ?? draft.recurrenceHistory ?? [])];
         let recurrence = draft.recurrence;
         if (existing?.recurrence && effectiveFrom && JSON.stringify(existing.recurrence) !== JSON.stringify(draft.recurrence)) {
@@ -77,7 +78,9 @@ export const todoRepository = {
           title: draft.title.trim(),
           note: draft.note.trim(),
           tags: [...new Set(draft.tags)],
-          subtasks: draft.subtasks.filter((item) => item.title.trim()).map((item) => ({ ...item, title: item.title.trim() })),
+          subtasks: subtasksUnchanged
+            ? (existing?.subtasks ?? []).map((item) => ({ ...item }))
+            : draft.subtasks.filter((item) => item.title.trim()).map((item) => ({ ...item, title: item.title.trim() })),
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
           completedAt: existing?.completedAt ?? null,
@@ -87,7 +90,7 @@ export const todoRepository = {
           seriesId: recurrence || recurrenceHistory.length > 0 ? (existing?.seriesId ?? id) : null,
           reminder: { enabled: draft.reminder.enabled, minutesBefore: Math.max(0, Math.min(1440, draft.reminder.minutesBefore)) }
         };
-        if (!saved.recurrence) {
+        if (!saved.recurrence && !subtasksUnchanged) {
           const completion = syncSubtaskCompletion(saved.subtasks, saved.completedAt, saved.completionSource);
           saved.completedAt = completion.completedAt;
           saved.completionSource = completion.completionSource;

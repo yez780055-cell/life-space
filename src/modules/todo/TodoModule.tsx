@@ -460,7 +460,6 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
           scheduledTime: draft.time,
           note: draft.note,
           tags: taskTags,
-          subtasks: draft.subtasks,
           reminder: draft.reminder
         });
       } else {
@@ -471,7 +470,6 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
           scheduledTime: draft.time,
           note: draft.note,
           tags: taskTags,
-          subtasks: draft.subtasks,
           reminder: draft.reminder
         });
       }
@@ -504,14 +502,6 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     pendingTasks: pendingInstances,
     completedTasks: completedInstances,
     onToggleTask: handleTaskToggle,
-    onToggleSubtask: async (task: TaskInstance, subtaskId: string, checked: boolean) => {
-      try {
-        await todoRepository.setSubtaskChecked(task.taskId, task.periodDate, subtaskId, checked);
-        await refreshData();
-      } catch (error) {
-        onNotice(error instanceof Error ? error.message : '子任务状态保存失败，请重试。');
-      }
-    },
     onEditTask: openTaskEditor,
     onOpenAdd: (trigger: HTMLElement) => openPersonalAdd(allView ? todayKey() : selectedDate, trigger),
     tagLabels: Object.fromEntries(personalTagRecords.map((tag) => [tag.id, tag.name]))

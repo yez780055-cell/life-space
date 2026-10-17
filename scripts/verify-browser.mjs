@@ -387,28 +387,50 @@ try {
     finally { database.close(); }
   });
 
+  const legacySubtasks = [
+    { id: 'legacy-a', title: '旧子任务A', checked: true },
+    { id: 'legacy-b', title: '旧子任务B', checked: false }
+  ];
+  await page.evaluate(async (subtasks) => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = database.transaction('todoTasks', 'readwrite');
+        const store = tx.objectStore('todoTasks');
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const task = request.result.find((record) => record.title === '浏览日期任务');
+          if (!task) { tx.abort(); reject(new Error('Could not seed the synthetic legacy task')); return; }
+          task.subtasks = subtasks;
+          task.completedAt = null;
+          task.completionSource = null;
+          store.put(task);
+        };
+        request.onerror = () => reject(request.error);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error('Could not seed the synthetic legacy task'));
+      });
+    } finally { database.close(); }
+  }, legacySubtasks);
+  await page.reload();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
+  await waitForTodoData(page);
+  await page.getByRole('button', { name: '全部' }).click();
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  if (await page.getByText('旧子任务A', { exact: true }).count() || await page.getByText('旧子任务B', { exact: true }).count()) throw new Error('Legacy subtasks were rendered on the Personal Todo home');
+  if (await page.getByText('1/2', { exact: true }).count()) throw new Error('Legacy subtask progress was rendered on the Personal Todo home');
+  if (await page.getByRole('button', { name: /子任务/ }).count()) throw new Error('A subtask control was rendered on the Personal Todo home');
+  if (await page.locator('.todo-minimal-subtask-progress,.todo-minimal-subtasks,.todo-minimal-subtask').count()) throw new Error('Legacy subtask UI selectors remain on the Personal Todo home');
+
   await page.getByRole('button', { name: '编辑任务：浏览日期任务' }).click();
   const editor = page.getByRole('dialog', { name: '编辑任务' });
   await editor.waitFor();
   await shot(page, 'todo-desktop-edit.png');
-  for (const title of ['整理主图', '导出图片', '临时删除验证']) {
-    await editor.getByLabel('添加子任务').fill(title);
-    await editor.getByRole('button', { name: '添加子任务' }).click();
-  }
-  await editor.getByRole('button', { name: '删除子任务：临时删除验证' }).click();
-  if (await editor.locator('.todo-minimal-editor-section-heading small').textContent() !== '0/2') throw new Error('Deleting a subtask did not immediately update the local editor count');
-  await editor.getByRole('button', { name: '取消', exact: true }).click();
-  await editor.waitFor({ state: 'detached' });
-  const taskAfterCanceledSubtaskDelete = await page.evaluate(async () => {
-    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '浏览日期任务')); request.onerror = () => reject(request.error); }); }
-    finally { database.close(); }
-  });
-  if (!taskAfterCanceledSubtaskDelete || taskAfterCanceledSubtaskDelete.subtasks.length !== 0) throw new Error('Canceling the editor persisted an uncommitted subtask deletion');
-
-  await page.getByRole('button', { name: '编辑任务：浏览日期任务' }).click();
-  const saveEditor = page.getByRole('dialog', { name: '编辑任务' });
-  await saveEditor.waitFor();
+  if (await editor.getByText(/子任务/).count()) throw new Error('The task editor still exposes subtask content');
+  if (await editor.getByRole('button', { name: /子任务/ }).count()) throw new Error('The task editor still exposes subtask actions');
+  if (await editor.locator('[class*="subtask"]').count()) throw new Error('The task editor still contains subtask UI selectors');
+  const saveEditor = editor;
   await saveEditor.getByRole('textbox', { name: '任务内容' }).fill('更新后的任务');
   const movedDate = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() + 3); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
   await saveEditor.getByLabel('任务日期').fill(movedDate);
@@ -416,12 +438,6 @@ try {
   await saveEditor.getByLabel('备注').fill('浏览器验证的任务备注');
   await saveEditor.getByLabel('添加标签').fill('运营');
   await saveEditor.getByRole('button', { name: '添加', exact: true }).click();
-  for (const title of ['整理主图', '导出图片', '临时删除验证']) {
-    await saveEditor.getByLabel('添加子任务').fill(title);
-    await saveEditor.getByRole('button', { name: '添加子任务' }).click();
-  }
-  await saveEditor.getByRole('button', { name: '删除子任务：临时删除验证' }).click();
-  if (await saveEditor.locator('.todo-minimal-editor-section-heading small').textContent() !== '0/2') throw new Error('The saved editor did not keep the removed subtask out of its count');
   await page.setViewportSize({ width: 390, height: 360 });
   const editMetrics = await saveEditor.evaluate((element) => {
     const fields = element.querySelector('.todo-minimal-editor-fields');
@@ -436,11 +452,12 @@ try {
   await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
   await page.getByText('14:30', { exact: true }).waitFor();
   await page.getByText('运营', { exact: true }).waitFor();
-  const subtaskProgress = page.getByRole('button', { name: /展开子任务：更新后的任务，0\/2/ });
-  await subtaskProgress.waitFor();
-  await subtaskProgress.click();
-  await page.getByRole('button', { name: '完成子任务：整理主图' }).click();
-  await page.getByRole('button', { name: /收起子任务：更新后的任务，1\/2/ }).waitFor();
+  const savedLegacySubtasks = await page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '更新后的任务')?.subtasks); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+  if (JSON.stringify(savedLegacySubtasks) !== JSON.stringify(legacySubtasks)) throw new Error(`Editing other fields changed the legacy subtask data: ${JSON.stringify(savedLegacySubtasks)}`);
 
   await page.getByRole('button', { name: '按日期' }).click();
   await page.getByRole('button', { name: '后一天' }).click();

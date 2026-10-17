@@ -86,7 +86,7 @@ describe('personal task repository', () => {
     expect(occursOn(monthly, '2026-03-31')).toBe(true);
   });
 
-  it('keeps subtask completion automatic and reversible only when completion came from subtasks', async () => {
+  it('retains the legacy subtask repository API for compatibility', async () => {
     const task = await todoRepository.saveTask(draft({ subtasks: [{ id: 'a', title: '一', checked: false }, { id: 'b', title: '二', checked: false }] }));
     await todoRepository.setSubtaskChecked(task.id, null, 'a', true);
     expect((await todoRepository.listTasks())[0].completedAt).toBeNull();
@@ -98,6 +98,20 @@ describe('personal task repository', () => {
     const empty = await todoRepository.saveTask(draft({ title: '空子任务' }));
     await todoRepository.setCompleted(empty.id, null, true);
     expect((await todoRepository.listTasks()).find((item) => item.id === empty.id)?.completionSource).toBe('manual');
+  });
+
+  it('preserves checked legacy subtasks and pending completion when saving unrelated task fields', async () => {
+    const task = await todoRepository.saveTask(draft({ subtasks: [{ id: 'a', title: '旧步骤A', checked: false }, { id: 'b', title: '旧步骤B', checked: false }] }));
+    await todoRepository.setSubtaskChecked(task.id, null, 'a', true);
+    await todoRepository.setSubtaskChecked(task.id, null, 'b', true);
+    await todoRepository.setCompleted(task.id, null, false);
+
+    const legacyBeforeEdit = (await todoRepository.listTasks()).find((item) => item.id === task.id)!;
+    expect(legacyBeforeEdit).toMatchObject({ completedAt: null, completionSource: null });
+    const saved = await todoRepository.saveTask({ ...legacyBeforeEdit, note: '只更新备注' });
+
+    expect(saved).toMatchObject({ note: '只更新备注', completedAt: null, completionSource: null });
+    expect(saved.subtasks).toEqual(legacyBeforeEdit.subtasks);
   });
 
   it('isolates recurring subtask state by cycle and keeps manual completion independent', async () => {

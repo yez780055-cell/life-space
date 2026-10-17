@@ -48,17 +48,8 @@
 .todo-personal-minimal .todo-minimal-time svg{width:13px;height:13px}
 .todo-personal-minimal .todo-minimal-tag{max-width:32%;overflow:hidden;padding:3px 7px;border-radius:999px;background:#edf4f6;color:#597b86;text-overflow:ellipsis;white-space:nowrap}
 .todo-personal-minimal .todo-minimal-more-tags{background:#f1f3f3;color:#839196}
-.todo-personal-minimal .todo-minimal-subtask-progress{display:inline-flex;align-items:center;gap:4px;min-height:22px;flex:none;padding:2px 7px;border:0;border-radius:999px;background:#f0f4f4;color:#6f858b;font-size:11px;font-variant-numeric:tabular-nums}
-.todo-personal-minimal .todo-minimal-subtask-progress svg{width:13px;height:13px}
-.todo-personal-minimal .todo-minimal-subtask-progress[aria-expanded="true"]{background:#e3edef;color:#527581}
 .todo-personal-minimal .todo-minimal-task.is-complete .todo-minimal-task-title{color:#879395;font-size:14px;font-weight:450}
 .todo-personal-minimal .todo-minimal-task.is-complete .todo-minimal-task-meta{opacity:.78}
-.todo-personal-minimal .todo-minimal-subtasks{display:grid;gap:1px;margin:4px 0 5px;padding:5px 0 1px;border-top:1px solid #eef1f1}
-.todo-personal-minimal .todo-minimal-subtask{display:flex;align-items:center;gap:8px;min-height:34px;padding:3px 4px;border:0;border-radius:7px;background:transparent;color:#647579;text-align:left;font-size:12px;line-height:1.35}
-.todo-personal-minimal .todo-minimal-subtask.is-checked>span:last-child{color:#98a3a4;text-decoration:line-through}
-.todo-personal-minimal .todo-minimal-subtask-check{width:19px;height:19px;display:grid;place-items:center;flex:none;border:1px solid #b8c7ca;border-radius:6px;background:#fff;color:#fff}
-.todo-personal-minimal .todo-minimal-subtask-check svg{width:13px;height:13px}
-.todo-personal-minimal .todo-minimal-subtask.is-checked .todo-minimal-subtask-check{border-color:#78939b;background:#78939b}
 .todo-personal-minimal .todo-minimal-empty{margin:9px 0 18px;padding:18px 10px;border:0;border-radius:0;background:transparent;color:#859398;font-size:13px;text-align:center}
 .todo-personal-minimal .todo-minimal-completed{margin-top:14px;padding-top:10px;border:0;border-top:1px solid #e8eded;border-radius:0;background:transparent;overflow:visible}
 .todo-personal-minimal .todo-minimal-completed-heading{margin:0 4px 8px;color:#5d7278;font-size:15px;font-weight:620}
@@ -98,32 +89,15 @@
 .todo-minimal-tag-options button.selected{border-color:#d8e7ea;background:#edf5f6;color:#527681}
 .todo-minimal-tag-options button.is-new{border-style:dashed}
 .todo-minimal-tag-options small{color:#9aa6a8;font-size:11px}
-.todo-minimal-add-tag,.todo-minimal-add-subtask{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin-top:9px}
-.todo-minimal-add-tag input,.todo-minimal-add-subtask input{width:100%;min-width:0;min-height:36px;padding:7px 9px;border:1px solid #edf0f0;border-radius:9px;background:#fbfcfc;color:#455a60;font:inherit;font-size:12px}
-.todo-minimal-add-tag button,.todo-minimal-add-subtask button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:0 10px;border:0;border-radius:9px;background:#edf2f3;color:#5f7f89;font:inherit;font-size:11px}
-.todo-minimal-add-tag button:disabled,.todo-minimal-add-subtask button:disabled{opacity:.5}
+.todo-minimal-add-tag{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin-top:9px}
+.todo-minimal-add-tag input{width:100%;min-width:0;min-height:36px;padding:7px 9px;border:1px solid #edf0f0;border-radius:9px;background:#fbfcfc;color:#455a60;font:inherit;font-size:12px}
+.todo-minimal-add-tag button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;padding:0 10px;border:0;border-radius:9px;background:#edf2f3;color:#5f7f89;font:inherit;font-size:11px}
+.todo-minimal-add-tag button:disabled{opacity:.5}
 .todo-minimal-reminder-row>div{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
 .todo-minimal-reminder-row select{max-width:100%;min-width:0;padding:5px 4px;border:0;background:transparent;color:#557785;font:inherit;font-size:12px;text-align:right}
 .todo-minimal-reminder-row button{min-width:58px;min-height:30px;padding:0 7px;border:1px solid #e7eeee;border-radius:9px;background:#f8fafa;color:#819196;font:inherit;font-size:10px;white-space:nowrap}
 .todo-minimal-reminder-row button[aria-pressed="true"]{border-color:#d5e5e8;background:#edf5f6;color:#527681}
 .todo-minimal-reminder-row button:disabled,.todo-minimal-reminder-row select:disabled{opacity:.55}
-.todo-minimal-editor-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
-.todo-minimal-editor-section-heading h3{margin:0;color:#4f646b;font-size:14px;font-weight:600}
-.todo-minimal-editor-section-heading small{color:#8b9a9d;font-size:11px;font-variant-numeric:tabular-nums}
-.todo-minimal-subtask-editor-list{overflow:hidden;border:1px solid #edf0f0;border-radius:11px}
-.todo-minimal-subtask-editor-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:4px;min-height:43px;padding:3px 6px;border-bottom:1px solid #f0f2f2}
-.todo-minimal-subtask-editor-row:last-child{border-bottom:0}
-.todo-minimal-subtask-check{width:34px;height:34px;display:grid;place-items:center;padding:0;border:0;border-radius:8px;background:transparent}
-.todo-minimal-subtask-check>span{width:20px;height:20px;display:grid;place-items:center;border:1px solid #b6c5c8;border-radius:6px;background:#fff;color:#fff}
-.todo-minimal-subtask-check.is-checked>span{border-color:#718f99;background:#718f99}
-.todo-minimal-subtask-check svg{width:14px;height:14px}
-.todo-minimal-subtask-editor-row>input{width:100%;min-width:0;min-height:34px;padding:3px 4px;border:0;background:transparent;color:#52656b;font:inherit;font-size:12px}
-.todo-minimal-subtask-actions{display:flex;align-items:center;gap:1px}
-.todo-minimal-subtask-actions button{width:27px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:#839296;font-size:14px}
-.todo-minimal-subtask-actions button[aria-label^="删除子任务"]{width:32px;height:32px;display:grid;place-items:center;padding:0;border-radius:8px;background:#fbf1f1;color:#b46f71}
-.todo-minimal-subtask-actions button[aria-label^="删除子任务"] svg{width:16px;height:16px}
-.todo-minimal-subtask-actions button:disabled{opacity:.3}
-.todo-minimal-add-subtask button svg{width:14px;height:14px}
 .todo-minimal-note-editor label{display:grid;gap:8px;color:#4f646b;font-size:13px;font-weight:580}
 .todo-minimal-note-editor textarea{width:100%;min-height:78px;resize:vertical;padding:10px;border:1px solid #edf0f0;border-radius:11px;background:#fbfcfc;color:#455a60;font:inherit;font-size:13px;line-height:1.5}
 .todo-minimal-note-editor textarea::placeholder{color:#aab3b4}
@@ -160,7 +134,4 @@
   .todo-minimal-setting-row{grid-template-columns:65px minmax(0,1fr);gap:6px}
   .todo-minimal-reminder-row>div{gap:4px}
   .todo-minimal-reminder-row select{font-size:11px}
-  .todo-minimal-subtask-editor-row{grid-template-columns:30px minmax(0,1fr) auto;gap:2px;padding-right:2px;padding-left:3px}
-  .todo-minimal-subtask-actions button{width:23px}
-  .todo-minimal-subtask-actions button[aria-label^="删除子任务"]{width:32px;height:32px}
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type TouchEvent } from 'react';
 import { Icon } from '../../shared/ui/icons';
 import { addDays, fromDateKey, todayKey } from './data/dates';
-import type { DateKey, PersonalSubtask, PersonalTag, ReminderSettings, TaskInstance } from './data/model';
+import type { DateKey, PersonalTag, ReminderSettings, TaskInstance } from './data/model';
 import './personal-todo.css';
 
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' });
@@ -51,20 +51,17 @@ export function trapDialogKeyboard(event: KeyboardEvent, dialog: HTMLElement | n
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
-function TaskRow({ task, completed, tagLabels, onToggle, onEdit, onToggleSubtask }: {
+function TaskRow({ task, completed, tagLabels, onToggle, onEdit }: {
   task: TaskInstance;
   completed: boolean;
   tagLabels: Record<string, string>;
   onToggle: () => void;
   onEdit: (task: TaskInstance, trigger: HTMLElement) => void;
-  onToggleSubtask: (task: TaskInstance, subtaskId: string, checked: boolean) => void;
 }) {
-  const [subtasksOpen, setSubtasksOpen] = useState(false);
-  const checkedCount = task.subtasks.filter((subtask) => subtask.checked).length;
   const tagNames = task.tags.map((tagId) => tagLabels[tagId] ?? tagId).filter(Boolean);
   const visibleTags = tagNames.slice(0, 2);
   const moreTags = tagNames.length - visibleTags.length;
-  const hasMetadata = Boolean(task.scheduledTime || tagNames.length || task.subtasks.length);
+  const hasMetadata = Boolean(task.scheduledTime || tagNames.length);
 
   return <article className={'todo-minimal-task' + (completed ? ' is-complete' : '')} data-task-key={task.instanceKey} data-testid="todo-task-row" role="listitem">
     <button
@@ -87,45 +84,27 @@ function TaskRow({ task, completed, tagLabels, onToggle, onEdit, onToggleSubtask
         {task.scheduledTime && <span className="todo-minimal-time"><Icon name="clock"/>{task.scheduledTime}</span>}
         {visibleTags.map((name, index) => <span className="todo-minimal-tag" key={`${task.tags[index]}-${name}`}>{name}</span>)}
         {moreTags > 0 && <span className="todo-minimal-tag todo-minimal-more-tags">+{moreTags}</span>}
-        {task.subtasks.length > 0 && <button
-          className="todo-minimal-subtask-progress"
-          type="button"
-          aria-label={`${subtasksOpen ? '收起' : '展开'}子任务：${task.title}，${checkedCount}/${task.subtasks.length}`}
-          aria-expanded={subtasksOpen}
-          onClick={() => setSubtasksOpen((open) => !open)}
-        ><Icon name="subtask"/><span>{checkedCount}/{task.subtasks.length}</span></button>}
-      </div>}
-      {subtasksOpen && task.subtasks.length > 0 && <div className="todo-minimal-subtasks" aria-label={`${task.title}子任务`}>
-        {task.subtasks.map((subtask) => <button
-          className={'todo-minimal-subtask' + (subtask.checked ? ' is-checked' : '')}
-          type="button"
-          key={subtask.id}
-          aria-pressed={subtask.checked}
-          aria-label={`${subtask.checked ? '取消完成' : '完成'}子任务：${subtask.title}`}
-          onClick={() => onToggleSubtask(task, subtask.id, !subtask.checked)}
-        ><span className="todo-minimal-subtask-check">{subtask.checked && <Icon name="check"/>}</span><span>{subtask.title}</span></button>)}
       </div>}
     </div>
   </article>;
 }
 
-function TaskList({ tasks, completed, tagLabels, onToggleTask, onEditTask, onToggleSubtask }: {
+function TaskList({ tasks, completed, tagLabels, onToggleTask, onEditTask }: {
   tasks: TaskInstance[];
   completed: boolean;
   tagLabels: Record<string, string>;
   onToggleTask: (task: TaskInstance) => void;
   onEditTask: (task: TaskInstance, trigger: HTMLElement) => void;
-  onToggleSubtask: (task: TaskInstance, subtaskId: string, checked: boolean) => void;
 }) {
   return <div className="todo-minimal-task-list" role="list">
     {tasks.map((task) => <TaskRow key={task.instanceKey} task={task} completed={completed} tagLabels={tagLabels}
-      onToggle={() => onToggleTask(task)} onEdit={onEditTask} onToggleSubtask={onToggleSubtask}/>)}
+      onToggle={() => onToggleTask(task)} onEdit={onEditTask}/>)}
   </div>;
 }
 
 export function PersonalTodoView({
   selectedDate, allView, onSelectDate, onSelectView, pendingTasks, completedTasks,
-  onToggleTask, onToggleSubtask, onEditTask, onOpenAdd, tagLabels, toggleRef
+  onToggleTask, onEditTask, onOpenAdd, tagLabels, toggleRef
 }: {
   selectedDate: DateKey;
   allView: boolean;
@@ -134,7 +113,6 @@ export function PersonalTodoView({
   pendingTasks: TaskInstance[];
   completedTasks: TaskInstance[];
   onToggleTask: (task: TaskInstance) => void;
-  onToggleSubtask: (task: TaskInstance, subtaskId: string, checked: boolean) => void;
   onEditTask: (task: TaskInstance, trigger: HTMLElement) => void;
   onOpenAdd: (trigger: HTMLElement) => void;
   tagLabels: Record<string, string>;
@@ -199,13 +177,13 @@ export function PersonalTodoView({
       {allView ? <>
         {pendingGroups.map(([date, tasks]) => <section className="todo-minimal-date-group" key={date || 'undated'} aria-label={date ? dateGroupLabel(date as DateKey, today) + '任务' : '未设置日期任务'} data-date-key={date || 'undated'}>
           <h2>{date ? dateGroupLabel(date as DateKey, today) : '未设置日期'}</h2>
-          <TaskList tasks={tasks} completed={false} tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask} onToggleSubtask={onToggleSubtask}/>
+          <TaskList tasks={tasks} completed={false} tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask}/>
         </section>)}
         {pendingTasks.length === 0 && <p className="todo-minimal-empty">还没有未完成的待办。</p>}
       </> : <>
         {pendingTasks.length > 0 && <section className="todo-minimal-date-group" aria-label={dateGroupLabel(selectedDate, today) + '任务'} data-date-key={selectedDate}>
           <h2>{dateGroupLabel(selectedDate, today)}</h2>
-          <TaskList tasks={pendingTasks} completed={false} tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask} onToggleSubtask={onToggleSubtask}/>
+          <TaskList tasks={pendingTasks} completed={false} tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask}/>
         </section>}
         {pendingTasks.length === 0 && <p className="todo-minimal-empty">这一天没有未完成的待办。</p>}
       </>}
@@ -216,8 +194,8 @@ export function PersonalTodoView({
       <div className="todo-minimal-completed-content">
         {allView ? completedGroups.map(([date, tasks]) => <section className="todo-minimal-date-group" key={date || 'undated'} aria-label={date ? dateGroupLabel(date as DateKey, today) + '已完成' : '未设置日期已完成'}>
           <h2>{date ? dateGroupLabel(date as DateKey, today) : '未设置日期'}</h2>
-          <TaskList tasks={tasks} completed tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask} onToggleSubtask={onToggleSubtask}/>
-        </section>) : completedTasks.length > 0 && <TaskList tasks={completedTasks} completed tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask} onToggleSubtask={onToggleSubtask}/>}
+          <TaskList tasks={tasks} completed tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask}/>
+        </section>) : completedTasks.length > 0 && <TaskList tasks={completedTasks} completed tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask}/>}
         {completedTasks.length === 0 && <p className="todo-minimal-empty">还没有已完成的待办。</p>}
       </div>
     </section>}
@@ -233,13 +211,8 @@ export type MinimalTaskDraft = {
   note: string;
   tags: string[];
   newTags: string[];
-  subtasks: PersonalSubtask[];
   reminder: ReminderSettings;
 };
-
-function createSubtaskId() {
-  return globalThis.crypto?.randomUUID?.() ?? `subtask-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
 
 export function MinimalTaskEditor({ task, tagOptions, removesSeriesHistory, onClose, onSave, onDelete }: {
   task: TaskInstance;
@@ -256,8 +229,6 @@ export function MinimalTaskEditor({ task, tagOptions, removesSeriesHistory, onCl
   const [tags, setTags] = useState(task.tags);
   const [newTags, setNewTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [subtasks, setSubtasks] = useState(() => task.subtasks.map((subtask) => ({ ...subtask })));
-  const [subtaskInput, setSubtaskInput] = useState('');
   const [reminderEnabled, setReminderEnabled] = useState(task.reminder.enabled);
   const [reminderMinutes, setReminderMinutes] = useState(task.reminder.minutesBefore);
   const [saving, setSaving] = useState(false);
@@ -287,21 +258,6 @@ export function MinimalTaskEditor({ task, tagOptions, removesSeriesHistory, onCl
     setTagInput('');
   };
 
-  const addSubtask = () => {
-    const normalized = subtaskInput.trim();
-    if (!normalized) return;
-    setSubtasks((current) => [...current, { id: createSubtaskId(), title: normalized, checked: false }]);
-    setSubtaskInput('');
-  };
-
-  const moveSubtask = (index: number, delta: -1 | 1) => setSubtasks((current) => {
-    const nextIndex = index + delta;
-    if (nextIndex < 0 || nextIndex >= current.length) return current;
-    const next = [...current];
-    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-    return next;
-  });
-
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalized = title.trim();
@@ -318,7 +274,6 @@ export function MinimalTaskEditor({ task, tagOptions, removesSeriesHistory, onCl
         note: note.trim(),
         tags,
         newTags,
-        subtasks: subtasks.filter((subtask) => subtask.title.trim()).map((subtask) => ({ ...subtask, title: subtask.title.trim() })),
         reminder: { enabled: reminderEnabled, minutesBefore: reminderMinutes }
       });
       onClose();
@@ -361,18 +316,6 @@ export function MinimalTaskEditor({ task, tagOptions, removesSeriesHistory, onCl
         </section>
 
         {confirmDelete && <div className="todo-minimal-delete-confirm" role="group" aria-label="确认删除"><p>{deleteWarning}</p><button type="button" onClick={() => setConfirmDelete(false)} disabled={saving}>取消删除</button><button type="button" className="danger" onClick={() => void confirmRemoval()} disabled={saving}>{saving ? '删除中…' : '确认删除'}</button></div>}
-
-        <section className="todo-minimal-editor-section todo-minimal-subtask-editor" aria-label="子任务">
-          <div className="todo-minimal-editor-section-heading"><h3>子任务</h3><small>{subtasks.filter((subtask) => subtask.checked).length}/{subtasks.length}</small></div>
-          {subtasks.length > 0 && <div className="todo-minimal-subtask-editor-list">
-            {subtasks.map((subtask, index) => <div className="todo-minimal-subtask-editor-row" key={subtask.id}>
-              <button className={'todo-minimal-subtask-check' + (subtask.checked ? ' is-checked' : '')} type="button" aria-label={`${subtask.checked ? '取消完成' : '完成'}子任务：${subtask.title}`} aria-pressed={subtask.checked} onClick={() => setSubtasks((current) => current.map((item) => item.id === subtask.id ? { ...item, checked: !item.checked } : item))}><span>{subtask.checked && <Icon name="check"/>}</span></button>
-              <input aria-label={`子任务内容：${index + 1}`} value={subtask.title} maxLength={500} onChange={(event) => setSubtasks((current) => current.map((item) => item.id === subtask.id ? { ...item, title: event.target.value } : item))}/>
-              <div className="todo-minimal-subtask-actions"><button type="button" aria-label={`上移子任务：${subtask.title}`} onClick={() => moveSubtask(index, -1)} disabled={index === 0}>↑</button><button type="button" aria-label={`下移子任务：${subtask.title}`} onClick={() => moveSubtask(index, 1)} disabled={index === subtasks.length - 1}>↓</button><button type="button" aria-label={`删除子任务：${subtask.title}`} onClick={() => setSubtasks((current) => current.filter((item) => item.id !== subtask.id))}><svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg></button></div>
-            </div>)}
-          </div>}
-          <div className="todo-minimal-add-subtask"><input aria-label="添加子任务" value={subtaskInput} onChange={(event) => setSubtaskInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addSubtask(); } }} placeholder="添加子任务" maxLength={500}/><button type="button" onClick={addSubtask} disabled={!subtaskInput.trim()}><Icon name="plus"/>添加子任务</button></div>
-        </section>
 
         <section className="todo-minimal-editor-section todo-minimal-note-editor"><label htmlFor="todo-minimal-note"><span>备注</span><textarea id="todo-minimal-note" aria-label="备注" rows={3} maxLength={5000} value={note} onChange={(event) => setNote(event.target.value)} placeholder="添加备注…"/></label></section>
         {error && <p className="todo-minimal-error" role="alert">{error}</p>}
