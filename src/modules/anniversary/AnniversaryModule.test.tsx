@@ -32,6 +32,43 @@ describe('Anniversary module UI', () => {
     expect(onScreen).toHaveBeenCalledWith('editor');
   });
 
+  it('shows the nearest custom milestone as Hero, lists its anchor week, and opens the selected record detail', async () => {
+    const today = localTodayKey();
+    const milestoneRecord = { ...record(addCalendarDays(today, -10), [12, 14]), id: 'milestone-home', title: '首页节点主项', createdAt: '2026-01-01T00:00:00.000Z' };
+    const yearlyDate = addCalendarDays(today, 5);
+    const yearlyRecord: AnniversaryRecord = { ...record(yearlyDate, [] , false), id: 'yearly-home', title: '首页周年项', createdAt: '2026-01-02T00:00:00.000Z' };
+    const onceRecord: AnniversaryRecord = { ...record(addCalendarDays(today, 6), [], false), id: 'once-home', recurrence: 'once', title: '第六天事项', createdAt: '2026-01-03T00:00:00.000Z' };
+    const outsideRecord: AnniversaryRecord = { ...record(addCalendarDays(today, 8), [], false), id: 'outside-home', recurrence: 'once', title: '窗口外事项', createdAt: '2026-01-04T00:00:00.000Z' };
+    listAnniversaries.mockResolvedValue([outsideRecord, onceRecord, yearlyRecord, milestoneRecord]);
+    const onScreen = vi.fn();
+    render(<AnniversaryModule snapshot={initialSnapshot('anniversary')} active onScreen={onScreen} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
+
+    const hero = await screen.findByRole('button', { name: '查看最近纪念日：首页节点主项' });
+    expect(hero.textContent).toContain('天数节点');
+    expect(hero.textContent).toContain('第 12 天');
+    expect(hero.textContent).toContain(formatDateKey(addCalendarDays(today, 1)));
+    expect(hero.textContent).toContain('还有 1 天');
+    fireEvent.click(hero);
+    expect(onScreen).toHaveBeenCalledWith('detail', milestoneRecord.id);
+    const week = screen.getByRole('region', { name: '接下来这一周' });
+    expect(week.textContent).toContain('第 14 天');
+    expect(week.textContent).toContain('首页周年项');
+    expect(week.textContent).toContain('首次纪念日');
+    expect(week.textContent).toContain('第六天事项');
+    expect(week.textContent).not.toContain('窗口外事项');
+    fireEvent.click(screen.getByRole('button', { name: '查看期待事项：首页周年项，首次纪念日' }));
+    expect(onScreen).toHaveBeenCalledWith('detail', yearlyRecord.id);
+  });
+
+  it('keeps a single upcoming item as the only Hero without an empty week section', async () => {
+    const today = localTodayKey();
+    listAnniversaries.mockResolvedValue([{ ...record(addCalendarDays(today, 20), [], false), recurrence: 'once', title: '稍后的单次事项' }]);
+    render(<AnniversaryModule snapshot={initialSnapshot('anniversary')} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
+    const hero = await screen.findByRole('button', { name: '查看最近纪念日：稍后的单次事项' });
+    expect(hero.textContent).toContain('还有 20 天');
+    expect(screen.queryByRole('region', { name: '接下来这一周' })).toBeNull();
+  });
+
   it('defaults day milestones off, adds and removes nodes, ignores duplicates, and retains nodes when toggled off', async () => {
     const onBack = vi.fn();
     createAnniversary.mockResolvedValue(record(localTodayKey(), [500, 520, 1000]));

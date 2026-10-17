@@ -1,5 +1,13 @@
 # Life Space 网页验证记录
 
+## Phase 3B 首页期待周与天数节点候选（2026-10-17）
+
+- 分支：`feat/anniversary-v1`，继续更新现有 Draft PR #7；没有创建新 PR。
+- 首页候选统一由周年、今天/未来单次日期、以及全部今天/未来天数节点组成。最近日期成为 Hero 锚点；从锚点到锚点后第 6 个公历日（含）内的其余事件列为同一期待周。单周仅一个事件时隐藏列表；同一记录同日周年/单次事项与节点合并并保留语义标签。
+- 本地检查：`npm run typecheck`、`npm run lint`、`npm test -- --run`（20 个文件、144 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：生产预览桌面与触控流程通过；新增合成期待节点作为最近 Hero、锚点窗口内多个节点/周年/单次日期、锚点后第 7 天排除、同日事件并列、周内点击打开正确详情，以及 320/360/390/430px 与放大文字布局。Todo、Couple、Period、PWA 原回归也通过。
+- 浏览器检查使用隔离 Chromium profile 和合成数据；截图放在忽略目录 `node_modules/.cache/phase3b-expectation`。GitHub Actions：等待推送触发后补记。
+
 ## Phase 3B 纪念日模块 V1（2026-10-17）
 
 - 基线：`main` / Phase 3A merge commit `34da1b01be95bf53fea330a1120c724e7d9894ee`；功能分支：`feat/anniversary-v1`。

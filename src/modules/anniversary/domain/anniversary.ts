@@ -1,5 +1,6 @@
 import type { AnniversaryDate, AnniversaryRecord } from '../types';
-import { calendarDayDifference, compareDateKeys, dateKeyFromParts, isLeapYear, parseDateKey } from './date';
+import { calendarDayDifference, compareDateKeys, dateKeyFromParts, dateOrdinal, isLeapYear, LAST_SUPPORTED_DATE, parseDateKey, addCalendarDays } from './date';
+import { milestoneDate, normalizeMilestoneDays } from './milestones';
 
 export interface AnniversaryOccurrence {
   nextDate: AnniversaryDate | null;
@@ -11,6 +12,26 @@ export interface AnniversaryOccurrence {
 
 export interface SortedAnniversary extends AnniversaryOccurrence {
   record: AnniversaryRecord;
+}
+
+export type AnniversaryUpcomingEventKind = 'yearly' | 'once' | 'milestone';
+
+export interface AnniversaryUpcomingEvent {
+  id: string;
+  recordId: string;
+  createdAt: string;
+  date: AnniversaryDate;
+  title: string;
+  kind: AnniversaryUpcomingEventKind;
+  kinds: AnniversaryUpcomingEventKind[];
+  label: string;
+  milestoneDay?: number;
+  anniversaryNumber?: number;
+}
+
+export interface AnniversaryUpcomingWeek {
+  anchor: AnniversaryUpcomingEvent | null;
+  weekEvents: AnniversaryUpcomingEvent[];
 }
 
 function sameMonthDayInYear(recordDate: AnniversaryDate, year: number): AnniversaryDate | null {
@@ -75,6 +96,97 @@ export function sortAnniversaries(records: AnniversaryRecord[], today: Anniversa
 
 export function selectNextAnniversary(records: AnniversaryRecord[], today: AnniversaryDate): SortedAnniversary | null {
   return sortAnniversaries(records, today).find((item) => item.nextDate !== null) ?? null;
+}
+
+const eventKindOrder: Record<AnniversaryUpcomingEventKind, number> = { yearly: 0, once: 1, milestone: 2 };
+
+function compareUpcomingEvents(left: AnniversaryUpcomingEvent, right: AnniversaryUpcomingEvent): number {
+  return compareDateKeys(left.date, right.date)
+    || left.createdAt.localeCompare(right.createdAt)
+    || left.recordId.localeCompare(right.recordId)
+    || eventKindOrder[left.kind] - eventKindOrder[right.kind]
+    || left.id.localeCompare(right.id);
+}
+
+/** Creates and groups every today-or-future yearly, once, and custom day event. */
+export function buildUpcomingEvents(records: AnniversaryRecord[], today: AnniversaryDate): AnniversaryUpcomingEvent[] {
+  if (!parseDateKey(today)) throw new RangeError('日期格式无效');
+  const candidates: AnniversaryUpcomingEvent[] = [];
+
+  for (const record of records) {
+    if (!parseDateKey(record.date)) throw new RangeError('日期格式无效');
+    if (record.recurrence === 'yearly') {
+      const occurrence = occurrenceFor(record, today);
+      if (occurrence.nextDate) {
+        candidates.push({
+          id: `${record.id}:${occurrence.nextDate}:yearly`, recordId: record.id, createdAt: record.createdAt,
+          date: occurrence.nextDate, title: record.title, kind: 'yearly', kinds: ['yearly'],
+          label: anniversaryNumberLabel(occurrence.anniversaryNumber) ?? '纪念日',
+          ...(occurrence.anniversaryNumber !== null ? { anniversaryNumber: occurrence.anniversaryNumber } : {})
+        });
+      }
+    } else if (record.recurrence === 'once') {
+      if (compareDateKeys(record.date, today) >= 0) {
+        candidates.push({ id: `${record.id}:${record.date}:once`, recordId: record.id, createdAt: record.createdAt, date: record.date, title: record.title, kind: 'once', kinds: ['once'], label: '一次性纪念' });
+      }
+    } else {
+      throw new RangeError('纪念日类型无效');
+    }
+
+    if (!record.milestoneEnabled) continue;
+    for (const milestoneDay of normalizeMilestoneDays(record.milestoneDays, record.date)) {
+      const date = milestoneDate(record.date, milestoneDay);
+      if (compareDateKeys(date, today) < 0) continue;
+      candidates.push({ id: `${record.id}:${date}:milestone:${milestoneDay}`, recordId: record.id, createdAt: record.createdAt, date, title: record.title, kind: 'milestone', kinds: ['milestone'], label: `天数节点 · 第 ${milestoneDay} 天`, milestoneDay });
+    }
+  }
+
+  const sortedCandidates = candidates.sort(compareUpcomingEvents);
+  const grouped = new Map<string, AnniversaryUpcomingEvent[]>();
+  for (const candidate of sortedCandidates) {
+    const key = `${candidate.recordId}\u0000${candidate.date}`;
+    const group = grouped.get(key) ?? [];
+    group.push(candidate);
+    grouped.set(key, group);
+  }
+
+  return [...grouped.values()].map((group) => {
+    const primary = [...group].sort((left, right) => eventKindOrder[left.kind] - eventKindOrder[right.kind] || left.id.localeCompare(right.id))[0];
+    const kinds = [...new Set(group.map((event) => event.kind))].sort((left, right) => eventKindOrder[left] - eventKindOrder[right]);
+    const labels = [...new Set(group.map((event) => event.label))];
+    const milestone = group.find((event) => event.milestoneDay !== undefined);
+    const yearly = group.find((event) => event.anniversaryNumber !== undefined);
+    return {
+      id: `${primary.recordId}:${primary.date}`,
+      recordId: primary.recordId,
+      createdAt: primary.createdAt,
+      date: primary.date,
+      title: primary.title,
+      kind: primary.kind,
+      kinds,
+      label: labels.join(' · '),
+      ...(milestone?.milestoneDay !== undefined ? { milestoneDay: milestone.milestoneDay } : {}),
+      ...(yearly?.anniversaryNumber !== undefined ? { anniversaryNumber: yearly.anniversaryNumber } : {})
+    };
+  }).sort(compareUpcomingEvents);
+}
+
+/** Uses the earliest event as the anchor and includes the next six natural days. */
+export function selectUpcomingWeek(events: AnniversaryUpcomingEvent[], today: AnniversaryDate): AnniversaryUpcomingWeek {
+  if (!parseDateKey(today)) throw new RangeError('日期格式无效');
+  const ordered = events.filter((event) => compareDateKeys(event.date, today) >= 0).sort(compareUpcomingEvents);
+  const anchor = ordered[0] ?? null;
+  if (!anchor) return { anchor: null, weekEvents: [] };
+  const endOrdinal = Math.min(dateOrdinal(anchor.date) + 6, dateOrdinal(LAST_SUPPORTED_DATE));
+  const windowEnd = endOrdinal === dateOrdinal(anchor.date) + 6 ? addCalendarDays(anchor.date, 6) : LAST_SUPPORTED_DATE;
+  return {
+    anchor,
+    weekEvents: ordered.filter((event) => event.id !== anchor.id && compareDateKeys(event.date, anchor.date) >= 0 && compareDateKeys(event.date, windowEnd) <= 0)
+  };
+}
+
+export function selectAnniversaryUpcomingWeek(records: AnniversaryRecord[], today: AnniversaryDate): AnniversaryUpcomingWeek {
+  return selectUpcomingWeek(buildUpcomingEvents(records, today), today);
 }
 
 export function anniversaryNumberLabel(number: number | null): string | null {
