@@ -87,5 +87,5 @@ Pages 只有一个站点：推送 `feat/todo-phase-2b` 会替换此开发预览�
 - `npm run typecheck`、`npm run lint`、`npm test -- --run`（19 个测试文件、117 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
 - `npm run verify:browser`：本机生产预览通过；覆盖现有 Todo、Couple、Period 回归，纪念日创建/编辑/删除/导航/数据隔离，手机 320、360、390、430px，文字放大、短视口编辑器及 PWA manifest/Service Worker 控制状态。截图保存在忽略目录 `.artifacts/browser-preview`。
 - 浏览器验证使用本机 `http://127.0.0.1:4189/` 预览。此次预览 scope 与 manifest 一致；GitHub Pages `/life-space/` 子路径仍需由 PR CI 验证。
-- GitHub Actions：Draft PR 建立后补记实际运行链接与状态。
+- GitHub Actions：[Foundation Web checks 运行 #37](https://github.com/yez780055-cell/life-space/actions/runs/38993907073)：对 Anniversary 功能提交 `33a5e51bc26327168af9a2df6df37c1ee84cc65c` 全部通过；TypeScript、ESLint、Vitest、production build、Chromium 安装、桌面/手机浏览器验证和截图步骤均成功。
 - Android 真机系统返回、软键盘遮挡与安全区 inset 尚待人工验收；本阶段不构建 APK。
