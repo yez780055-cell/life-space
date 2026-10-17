@@ -70,7 +70,7 @@ function TaskRow({ task, completed, tagLabels, onToggle, onEdit, onToggleSubtask
     <button
       className={'todo-minimal-check' + (completed ? ' is-complete' : '')}
       type="button"
-      aria-label={(completed ? '恢复任务：' : '完成任务：') + task.title}
+      aria-label={(completed ? '已完成任务：' : '完成任务：') + task.title}
       aria-pressed={completed}
       onClick={onToggle}
     ><span className="todo-minimal-check-mark">{completed && <Icon name="check"/>}</span></button>
@@ -79,9 +79,9 @@ function TaskRow({ task, completed, tagLabels, onToggle, onEdit, onToggleSubtask
         <button className="todo-minimal-task-title" type="button" onClick={(event) => onEdit(task, event.currentTarget)}>
           <span>{task.title}</span>
         </button>
-        <button className="todo-minimal-edit" type="button" aria-label={'编辑任务：' + task.title} onClick={(event) => onEdit(task, event.currentTarget)}>
-          <Icon name="chevron"/>
-        </button>
+        {completed
+          ? <button className="todo-minimal-restore" type="button" aria-label={'恢复任务：' + task.title} onClick={onToggle}>恢复</button>
+          : <button className="todo-minimal-edit" type="button" aria-label={'编辑任务：' + task.title} onClick={(event) => onEdit(task, event.currentTarget)}><Icon name="chevron"/></button>}
       </div>
       {hasMetadata && <div className="todo-minimal-task-meta" aria-label="任务信息">
         {task.scheduledTime && <span className="todo-minimal-time"><Icon name="clock"/>{task.scheduledTime}</span>}
@@ -183,12 +183,17 @@ export function PersonalTodoView({
         <button type="button" aria-pressed={allView} className={allView ? 'selected' : ''} onClick={() => onSelectView(true)}>全部</button>
         <button type="button" aria-pressed={!allView} className={!allView ? 'selected' : ''} onClick={() => onSelectView(false)}>按日期</button>
       </div>
-      {!allView && <div className="todo-minimal-date-navigation" role="group" aria-label="日期导航">
-        <button type="button" aria-label="前一天" onClick={() => shiftDate(-1)}><Icon name="chevron" className="previous"/></button>
-        <button type="button" aria-label="后一天" onClick={() => shiftDate(1)}><Icon name="chevron" className="next"/></button>
-        {selectedDate !== today && <button className="todo-minimal-today" type="button" onClick={() => onSelectDate(today)}>回到今天</button>}
-      </div>}
+      <button className="todo-minimal-completed-toggle" type="button" aria-expanded={completedOpen} aria-label={`已完成 ${completedTasks.length} 项`} onClick={() => setCompletedOpen((open) => !open)}>
+        <span>已完成 {completedTasks.length}</span>
+        <Icon name="chevron" className={completedOpen ? 'is-open' : ''}/>
+      </button>
     </div>
+
+    {!allView && <div className="todo-minimal-date-navigation" role="group" aria-label="日期导航">
+      <button type="button" aria-label="前一天" onClick={() => shiftDate(-1)}><Icon name="chevron" className="previous"/></button>
+      <button type="button" aria-label="后一天" onClick={() => shiftDate(1)}><Icon name="chevron" className="next"/></button>
+      {selectedDate !== today && <button className="todo-minimal-today" type="button" onClick={() => onSelectDate(today)}>回到今天</button>}
+    </div>}
 
     <section className="todo-minimal-task-area" data-testid="todo-date-area" aria-label={allView ? '全部未完成任务' : dateSummary(selectedDate, today) + '任务'} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {allView ? <>
@@ -206,19 +211,16 @@ export function PersonalTodoView({
       </>}
     </section>
 
-    <section className="todo-minimal-completed" aria-label="已完成任务">
-      <button className="todo-minimal-completed-toggle" type="button" aria-expanded={completedOpen} onClick={() => setCompletedOpen((open) => !open)}>
-        <span><strong>已完成</strong><small>{completedTasks.length} 项</small></span>
-        <Icon name="chevron" className={completedOpen ? 'is-open' : ''}/>
-      </button>
-      {completedOpen && <div className="todo-minimal-completed-content">
+    {completedOpen && <section className="todo-minimal-completed" aria-label="已完成任务">
+      <h2 className="todo-minimal-completed-heading">已完成</h2>
+      <div className="todo-minimal-completed-content">
         {allView ? completedGroups.map(([date, tasks]) => <section className="todo-minimal-date-group" key={date || 'undated'} aria-label={date ? dateGroupLabel(date as DateKey, today) + '已完成' : '未设置日期已完成'}>
           <h2>{date ? dateGroupLabel(date as DateKey, today) : '未设置日期'}</h2>
           <TaskList tasks={tasks} completed tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask} onToggleSubtask={onToggleSubtask}/>
         </section>) : completedTasks.length > 0 && <TaskList tasks={completedTasks} completed tagLabels={tagLabels} onToggleTask={onToggleTask} onEditTask={onEditTask} onToggleSubtask={onToggleSubtask}/>}
         {completedTasks.length === 0 && <p className="todo-minimal-empty">还没有已完成的待办。</p>}
-      </div>}
-    </section>
+      </div>
+    </section>}
 
     <button className="todo-minimal-fab" type="button" aria-label="快速新增待办" onClick={(event) => onOpenAdd(event.currentTarget)}><Icon name="plus"/></button>
   </div>;
@@ -366,7 +368,7 @@ export function MinimalTaskEditor({ task, tagOptions, removesSeriesHistory, onCl
             {subtasks.map((subtask, index) => <div className="todo-minimal-subtask-editor-row" key={subtask.id}>
               <button className={'todo-minimal-subtask-check' + (subtask.checked ? ' is-checked' : '')} type="button" aria-label={`${subtask.checked ? '取消完成' : '完成'}子任务：${subtask.title}`} aria-pressed={subtask.checked} onClick={() => setSubtasks((current) => current.map((item) => item.id === subtask.id ? { ...item, checked: !item.checked } : item))}><span>{subtask.checked && <Icon name="check"/>}</span></button>
               <input aria-label={`子任务内容：${index + 1}`} value={subtask.title} maxLength={500} onChange={(event) => setSubtasks((current) => current.map((item) => item.id === subtask.id ? { ...item, title: event.target.value } : item))}/>
-              <div className="todo-minimal-subtask-actions"><button type="button" aria-label={`上移子任务：${subtask.title}`} onClick={() => moveSubtask(index, -1)} disabled={index === 0}>↑</button><button type="button" aria-label={`下移子任务：${subtask.title}`} onClick={() => moveSubtask(index, 1)} disabled={index === subtasks.length - 1}>↓</button><button type="button" aria-label={`删除子任务：${subtask.title}`} onClick={() => setSubtasks((current) => current.filter((item) => item.id !== subtask.id))}>×</button></div>
+              <div className="todo-minimal-subtask-actions"><button type="button" aria-label={`上移子任务：${subtask.title}`} onClick={() => moveSubtask(index, -1)} disabled={index === 0}>↑</button><button type="button" aria-label={`下移子任务：${subtask.title}`} onClick={() => moveSubtask(index, 1)} disabled={index === subtasks.length - 1}>↓</button><button type="button" aria-label={`删除子任务：${subtask.title}`} onClick={() => setSubtasks((current) => current.filter((item) => item.id !== subtask.id))}><svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg></button></div>
             </div>)}
           </div>}
           <div className="todo-minimal-add-subtask"><input aria-label="添加子任务" value={subtaskInput} onChange={(event) => setSubtaskInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addSubtask(); } }} placeholder="添加子任务" maxLength={500}/><button type="button" onClick={addSubtask} disabled={!subtaskInput.trim()}><Icon name="plus"/>添加子任务</button></div>

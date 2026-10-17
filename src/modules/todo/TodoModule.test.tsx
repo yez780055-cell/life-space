@@ -200,10 +200,48 @@ describe('minimal personal Todo', () => {
     expect(screen.queryByRole('button', { name: '恢复任务：已完成旧任务' })).toBeNull();
     const completedToggle = document.querySelector('.todo-minimal-completed-toggle') as HTMLButtonElement;
     expect(completedToggle).toBeTruthy();
+    expect(completedToggle.closest('.todo-minimal-toolbar')).toBeTruthy();
+    expect(completedToggle.textContent).toContain('已完成 1');
+    expect(document.querySelector('.todo-minimal-completed .todo-minimal-completed-toggle')).toBeNull();
     expect(completedToggle.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(completedToggle);
     expect(await screen.findByRole('button', { name: '恢复任务：已完成旧任务' })).toBeTruthy();
+    const completedRow = document.querySelector(`[data-task-key="${completed.id}"]`);
+    expect(completedRow?.querySelector('.todo-minimal-check-mark')).toBeTruthy();
+    expect(completedRow?.querySelector('.todo-minimal-check')?.classList.contains('is-complete')).toBe(true);
     expect(screen.getByRole('heading', { name: '未设置日期' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '按日期' }));
+    await waitFor(() => expect(completedToggle.getAttribute('aria-expanded')).toBe('false'));
+    expect(document.querySelector('.todo-minimal-completed')).toBeNull();
+  });
+
+  it('restores a historical completed task from its visible action and keeps the state after reload', async () => {
+    const past = addDays(todayKey(), -4);
+    const task = await todoRepository.createQuickTask('恢复旧完成任务', past);
+    await todoRepository.setCompleted(task.id, null, true);
+
+    render(<App/>);
+    await screen.findByRole('heading', { name: '个人待办' });
+    await waitForTodoData();
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    const toggle = screen.getByRole('button', { name: '已完成 1 项' });
+    fireEvent.click(toggle);
+    expect(await screen.findByRole('button', { name: '恢复任务：恢复旧完成任务' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '已完成任务：恢复旧完成任务' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: '恢复任务：恢复旧完成任务' }));
+    await screen.findByRole('button', { name: '完成任务：恢复旧完成任务' });
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.completedAt).toBeNull());
+    expect(screen.queryByRole('button', { name: '恢复任务：恢复旧完成任务' })).toBeNull();
+
+    cleanup();
+    render(<App/>);
+    await screen.findByRole('heading', { name: '个人待办' });
+    await waitForTodoData();
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
+    expect(await screen.findByRole('button', { name: '完成任务：恢复旧完成任务' })).toBeTruthy();
+    expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.completedAt).toBeNull();
   });
 
   it('moves a task to completed immediately, undoes only the selected completion, and persists both states', async () => {
@@ -258,6 +296,45 @@ describe('minimal personal Todo', () => {
     expect(await todoRepository.listTasks()).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '全部' }));
     expect(await screen.findByRole('button', { name: '完成任务：给绿萝换盆' })).toBeTruthy();
+  });
+
+  it('deletes subtasks only after save, preserves them on cancel, and allows replacing the last subtask', async () => {
+    const task = await todoRepository.saveTask({
+      title: '整理旅行清单', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [],
+      subtasks: [{ id: 'tickets', title: '确认车票', checked: false }, { id: 'charger', title: '准备充电器', checked: false }],
+      recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
+    });
+
+    render(<App/>);
+    await screen.findByRole('button', { name: '编辑任务：整理旅行清单' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑任务：整理旅行清单' }));
+    let editor = await screen.findByRole('dialog', { name: '编辑任务' });
+    expect(editor.querySelector('.todo-minimal-editor-section-heading small')?.textContent).toBe('0/2');
+    fireEvent.click(within(editor).getByRole('button', { name: '删除子任务：准备充电器' }));
+    expect(editor.querySelector('.todo-minimal-editor-section-heading small')?.textContent).toBe('0/1');
+    expect(within(editor).queryByRole('textbox', { name: '子任务内容：2' })).toBeNull();
+    fireEvent.click(within(editor).getByRole('button', { name: /^取消$/ }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
+    expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.subtasks.map(({ id }) => id)).toEqual(['tickets', 'charger']);
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑任务：整理旅行清单' }));
+    editor = await screen.findByRole('dialog', { name: '编辑任务' });
+    fireEvent.click(within(editor).getByRole('button', { name: '删除子任务：准备充电器' }));
+    fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.subtasks.map(({ id }) => id)).toEqual(['tickets']));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
+
+    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：整理旅行清单' }));
+    editor = await screen.findByRole('dialog', { name: '编辑任务' });
+    fireEvent.click(within(editor).getByRole('button', { name: '删除子任务：确认车票' }));
+    expect(editor.querySelector('.todo-minimal-editor-section-heading small')?.textContent).toBe('0/0');
+    fireEvent.change(within(editor).getByRole('textbox', { name: '添加子任务' }), { target: { value: '补充行程卡' } });
+    fireEvent.click(within(editor).getByRole('button', { name: '添加子任务' }));
+    expect(editor.querySelector('.todo-minimal-editor-section-heading small')?.textContent).toBe('0/1');
+    fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
+    await waitFor(async () => expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.subtasks.map(({ title }) => title)).toEqual(['补充行程卡']));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
+    expect(await screen.findByRole('button', { name: '编辑任务：整理旅行清单' })).toBeTruthy();
   });
 
   it('asks before deleting a recurring series and removes its history only after confirmation', async () => {

@@ -337,17 +337,40 @@ try {
   if (await sameDateGroup.locator('.todo-minimal-task-list').count() !== 1) throw new Error('Date group does not use one shared task container');
   await shot(page, 'todo-desktop-all.png');
 
+  const pendingRow = page.locator('[data-testid="todo-task-row"]').filter({ hasText: '浏览日期任务' });
+  const pendingCheckBounds = await pendingRow.locator('.todo-minimal-check').boundingBox();
+  const pendingMarkBounds = await pendingRow.locator('.todo-minimal-check-mark').boundingBox();
+  if (!pendingCheckBounds || pendingCheckBounds.width < 44 || pendingCheckBounds.height < 44 || !pendingMarkBounds || pendingMarkBounds.width > 26 || pendingMarkBounds.height > 26) throw new Error(`Pending checkbox has an invalid hit area or visible mark: ${JSON.stringify({ pendingCheckBounds, pendingMarkBounds })}`);
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).click();
   await page.getByRole('button', { name: '撤销完成：浏览日期任务' }).click();
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).click();
   const completed = page.locator('.todo-minimal-completed-toggle');
-  await page.waitForFunction(() => document.querySelector('.todo-minimal-completed-toggle')?.textContent?.includes('1 项'));
+  await page.getByRole('button', { name: '已完成 1 项' }).waitFor();
+  if (!(await completed.evaluate((element) => Boolean(element.closest('.todo-minimal-toolbar'))))) throw new Error('Completed toggle is not located in the top toolbar');
+  if (await page.locator('.todo-minimal-completed .todo-minimal-completed-toggle').count()) throw new Error('Completed toggle is still rendered at the bottom of the task area');
   if (await completed.getAttribute('aria-expanded') !== 'false') throw new Error('Completed records should start folded');
   await completed.click();
+  const completedStatus = page.getByRole('button', { name: '已完成任务：浏览日期任务' });
+  const completedCheckBounds = await completedStatus.boundingBox();
+  const completedMarkBounds = await completedStatus.locator('.todo-minimal-check-mark').boundingBox();
+  const completedButtonBackground = await completedStatus.evaluate((element) => getComputedStyle(element).backgroundColor);
+  if (!completedCheckBounds || completedCheckBounds.width < 44 || completedCheckBounds.height < 44 || !completedMarkBounds || completedMarkBounds.width > 26 || completedMarkBounds.height > 26 || completedMarkBounds.width !== pendingMarkBounds.width || completedMarkBounds.height !== pendingMarkBounds.height) throw new Error(`Completed checkbox differs from pending checkbox: ${JSON.stringify({ pendingMarkBounds, completedCheckBounds, completedMarkBounds })}`);
+  if (completedButtonBackground !== 'rgba(0, 0, 0, 0)' && completedButtonBackground !== 'transparent') throw new Error(`Completed fill leaked onto its outer hit area: ${completedButtonBackground}`);
+  await page.getByRole('button', { name: '撤销完成：浏览日期任务' }).waitFor({ state: 'detached' });
   await page.getByRole('button', { name: '恢复任务：浏览日期任务' }).waitFor();
   await page.getByRole('button', { name: '恢复任务：浏览日期任务' }).click();
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  await page.reload();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
+  await page.getByRole('button', { name: '全部' }).click();
+  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
+  const restoredTask = await page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '浏览日期任务')); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+  if (!restoredTask || restoredTask.completedAt !== null) throw new Error(`Restored task did not remain pending after reload: ${JSON.stringify(restoredTask)}`);
   await page.getByRole('button', { name: '完成任务：第二件事' }).click();
   await page.waitForFunction(async () => {
     const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -359,19 +382,39 @@ try {
   const editor = page.getByRole('dialog', { name: '编辑任务' });
   await editor.waitFor();
   await shot(page, 'todo-desktop-edit.png');
-  await editor.getByRole('textbox', { name: '任务内容' }).fill('更新后的任务');
+  for (const title of ['整理主图', '导出图片', '临时删除验证']) {
+    await editor.getByLabel('添加子任务').fill(title);
+    await editor.getByRole('button', { name: '添加子任务' }).click();
+  }
+  await editor.getByRole('button', { name: '删除子任务：临时删除验证' }).click();
+  if (await editor.locator('.todo-minimal-editor-section-heading small').textContent() !== '0/2') throw new Error('Deleting a subtask did not immediately update the local editor count');
+  await editor.getByRole('button', { name: '取消', exact: true }).click();
+  await editor.waitFor({ state: 'detached' });
+  const taskAfterCanceledSubtaskDelete = await page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '浏览日期任务')); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+  if (!taskAfterCanceledSubtaskDelete || taskAfterCanceledSubtaskDelete.subtasks.length !== 0) throw new Error('Canceling the editor persisted an uncommitted subtask deletion');
+
+  await page.getByRole('button', { name: '编辑任务：浏览日期任务' }).click();
+  const saveEditor = page.getByRole('dialog', { name: '编辑任务' });
+  await saveEditor.waitFor();
+  await saveEditor.getByRole('textbox', { name: '任务内容' }).fill('更新后的任务');
   const movedDate = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() + 3); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
-  await editor.getByLabel('任务日期').fill(movedDate);
-  await editor.getByLabel('任务时间').fill('14:30');
-  await editor.getByLabel('备注').fill('浏览器验证的任务备注');
-  await editor.getByLabel('添加标签').fill('运营');
-  await editor.getByRole('button', { name: '添加', exact: true }).click();
-  await editor.getByLabel('添加子任务').fill('整理主图');
-  await editor.getByRole('button', { name: '添加子任务' }).click();
-  await editor.getByLabel('添加子任务').fill('导出图片');
-  await editor.getByRole('button', { name: '添加子任务' }).click();
+  await saveEditor.getByLabel('任务日期').fill(movedDate);
+  await saveEditor.getByLabel('任务时间').fill('14:30');
+  await saveEditor.getByLabel('备注').fill('浏览器验证的任务备注');
+  await saveEditor.getByLabel('添加标签').fill('运营');
+  await saveEditor.getByRole('button', { name: '添加', exact: true }).click();
+  for (const title of ['整理主图', '导出图片', '临时删除验证']) {
+    await saveEditor.getByLabel('添加子任务').fill(title);
+    await saveEditor.getByRole('button', { name: '添加子任务' }).click();
+  }
+  await saveEditor.getByRole('button', { name: '删除子任务：临时删除验证' }).click();
+  if (await saveEditor.locator('.todo-minimal-editor-section-heading small').textContent() !== '0/2') throw new Error('The saved editor did not keep the removed subtask out of its count');
   await page.setViewportSize({ width: 390, height: 360 });
-  const editMetrics = await editor.evaluate((element) => {
+  const editMetrics = await saveEditor.evaluate((element) => {
     const fields = element.querySelector('.todo-minimal-editor-fields');
     const save = element.querySelector('footer button[type="submit"]');
     const box = save?.getBoundingClientRect();
@@ -379,8 +422,8 @@ try {
   });
   if (editMetrics.scrollHeight <= editMetrics.clientHeight || editMetrics.saveBottom > editMetrics.viewportHeight) throw new Error(`Task editor does not scroll with a reachable save action in a keyboard-sized viewport: ${JSON.stringify(editMetrics)}`);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await editor.getByRole('button', { name: '保存' }).click();
-  await editor.waitFor({ state: 'detached' });
+  await saveEditor.getByRole('button', { name: '保存' }).click();
+  await saveEditor.waitFor({ state: 'detached' });
   await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
   await page.getByText('14:30', { exact: true }).waitFor();
   await page.getByText('运营', { exact: true }).waitFor();
@@ -391,7 +434,10 @@ try {
   await page.getByRole('button', { name: /收起子任务：更新后的任务，1\/2/ }).waitFor();
 
   await page.getByRole('button', { name: '按日期' }).click();
+  await page.getByRole('button', { name: '后一天' }).click();
   await page.getByRole('button', { name: '回到今天' }).waitFor();
+  await page.getByRole('button', { name: '回到今天' }).click();
+  await page.getByRole('button', { name: '后一天' }).click();
   const selectedDateHeading = await page.locator('.todo-minimal-summary time').getAttribute('datetime');
   await swipe(page, '.todo-minimal-task-area', 290, 340, 130, 340);
   await page.waitForFunction((previous) => document.querySelector('.todo-minimal-summary time')?.getAttribute('datetime') !== previous, selectedDateHeading);
@@ -910,9 +956,44 @@ try {
   await mobileQuick.getByRole('button', { name: '关闭' }).last().tap();
   await mobilePage.getByRole('button', { name: '全部' }).tap();
   await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
-  await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).tap();
-  await mobilePage.getByRole('button', { name: '撤销完成：手机上的任务' }).tap();
+  const mobileTaskRow = mobilePage.locator('[data-testid="todo-task-row"]').filter({ hasText: '手机上的任务' });
+  for (const width of [320, 360, 390, 430]) {
+    await mobilePage.setViewportSize({ width, height: 844 });
+    const toggle = mobilePage.locator('.todo-minimal-completed-toggle');
+    const toolbar = mobilePage.locator('.todo-minimal-toolbar');
+    const [toolbarBounds, tabsBounds, toggleBounds] = await Promise.all([toolbar.boundingBox(), mobilePage.locator('.todo-minimal-tabs').boundingBox(), toggle.boundingBox()]);
+    if (!toolbarBounds || !tabsBounds || !toggleBounds || toggleBounds.x < tabsBounds.x + tabsBounds.width || toggleBounds.x + toggleBounds.width > toolbarBounds.x + toolbarBounds.width + 1) throw new Error(`Completed control is not reachable at the right of the toolbar at ${width}px: ${JSON.stringify({ toolbarBounds, tabsBounds, toggleBounds })}`);
+    if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > width) throw new Error(`Personal Todo has horizontal overflow at ${width}px (${await mobilePage.evaluate(() => document.documentElement.scrollWidth)}px)`);
+    const pendingCheck = mobileTaskRow.locator('.todo-minimal-check');
+    const pendingCheckBox = await pendingCheck.boundingBox();
+    const pendingMark = await pendingCheck.locator('.todo-minimal-check-mark').boundingBox();
+    if (!pendingCheckBox || pendingCheckBox.width < 44 || pendingCheckBox.height < 44 || !pendingMark || pendingMark.width > 26 || pendingMark.height > 26) throw new Error(`Pending checkbox is too large or too small at ${width}px: ${JSON.stringify({ pendingCheckBox, pendingMark })}`);
+
+    await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).tap();
+    await mobilePage.getByRole('button', { name: '撤销完成：手机上的任务' }).waitFor();
+    await mobilePage.getByRole('button', { name: '已完成 1 项' }).waitFor();
+    await mobilePage.getByRole('button', { name: '撤销完成：手机上的任务' }).waitFor({ state: 'detached' });
+    await toggle.tap();
+    const completedCheck = mobilePage.getByRole('button', { name: '已完成任务：手机上的任务' });
+    await completedCheck.waitFor();
+    const completedCheckBox = await completedCheck.boundingBox();
+    const completedMark = await completedCheck.locator('.todo-minimal-check-mark').boundingBox();
+    const outerBackground = await completedCheck.evaluate((element) => getComputedStyle(element).backgroundColor);
+    if (!completedCheckBox || completedCheckBox.width < 44 || completedCheckBox.height < 44 || !completedMark || completedMark.width > 26 || completedMark.height > 26 || completedMark.width !== pendingMark.width || completedMark.height !== pendingMark.height || outerBackground !== 'rgba(0, 0, 0, 0)' && outerBackground !== 'transparent') throw new Error(`Completed checkbox does not match the pending mark at ${width}px: ${JSON.stringify({ pendingMark, completedCheckBox, completedMark, outerBackground })}`);
+    await mobilePage.getByRole('button', { name: '恢复任务：手机上的任务' }).tap();
+    await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
+    if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.tap();
+    if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > width) throw new Error(`Personal Todo overflows after restore at ${width}px`);
+  }
+  await mobilePage.reload();
+  await mobilePage.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
+  const mobileRestoredTask = await mobilePage.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '手机上的任务')); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+  if (!mobileRestoredTask || mobileRestoredTask.completedAt !== null) throw new Error(`Mobile restore did not persist after reload: ${JSON.stringify(mobileRestoredTask)}`);
   await mobilePage.getByRole('button', { name: '编辑任务：手机上的任务' }).tap();
   const mobileEditor = mobilePage.getByRole('dialog', { name: '编辑任务' });
   await mobileEditor.waitFor();
