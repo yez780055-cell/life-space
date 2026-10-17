@@ -19,7 +19,7 @@ beforeEach(clearDb);
 
 function draft(overrides: Partial<Parameters<typeof todoRepository.saveTask>[0]> = {}): Parameters<typeof todoRepository.saveTask>[0] {
   return {
-    title: '整理桌面', note: '', scheduledDate: null, scheduledTime: null, tags: [], subtasks: [], recurrence: null, recurrenceHistory: [],
+    title: '整理桌面', note: '', scheduledDate: null, scheduledTime: null, tags: [], recurrence: null, recurrenceHistory: [],
     reminder: { enabled: false, minutesBefore: 10 }, ...overrides
   };
 }
@@ -86,46 +86,28 @@ describe('personal task repository', () => {
     expect(occursOn(monthly, '2026-03-31')).toBe(true);
   });
 
-  it('retains the legacy subtask repository API for compatibility', async () => {
-    const task = await todoRepository.saveTask(draft({ subtasks: [{ id: 'a', title: '一', checked: false }, { id: 'b', title: '二', checked: false }] }));
-    await todoRepository.setSubtaskChecked(task.id, null, 'a', true);
-    expect((await todoRepository.listTasks())[0].completedAt).toBeNull();
-    await todoRepository.setSubtaskChecked(task.id, null, 'b', true);
-    expect((await todoRepository.listTasks())[0].completionSource).toBe('subtasks');
-    await todoRepository.setSubtaskChecked(task.id, null, 'a', false);
-    expect((await todoRepository.listTasks())[0].completedAt).toBeNull();
-
-    const empty = await todoRepository.saveTask(draft({ title: '空子任务' }));
-    await todoRepository.setCompleted(empty.id, null, true);
-    expect((await todoRepository.listTasks()).find((item) => item.id === empty.id)?.completionSource).toBe('manual');
+  it('persists only the supported task fields', async () => {
+    const task = await todoRepository.createQuickTask('新待办');
+    expect(Object.keys(task).sort()).toEqual([
+      'completedAt', 'completionSource', 'createdAt', 'id', 'note', 'recurrence', 'recurrenceHistory',
+      'reminder', 'scheduledDate', 'scheduledTime', 'seriesId', 'tags', 'title', 'updatedAt'
+    ]);
   });
 
-  it('preserves checked legacy subtasks and pending completion when saving unrelated task fields', async () => {
-    const task = await todoRepository.saveTask(draft({ subtasks: [{ id: 'a', title: '旧步骤A', checked: false }, { id: 'b', title: '旧步骤B', checked: false }] }));
-    await todoRepository.setSubtaskChecked(task.id, null, 'a', true);
-    await todoRepository.setSubtaskChecked(task.id, null, 'b', true);
-    await todoRepository.setCompleted(task.id, null, false);
-
-    const legacyBeforeEdit = (await todoRepository.listTasks()).find((item) => item.id === task.id)!;
-    expect(legacyBeforeEdit).toMatchObject({ completedAt: null, completionSource: null });
-    const saved = await todoRepository.saveTask({ ...legacyBeforeEdit, note: '只更新备注' });
-
-    expect(saved).toMatchObject({ note: '只更新备注', completedAt: null, completionSource: null });
-    expect(saved.subtasks).toEqual(legacyBeforeEdit.subtasks);
-  });
-
-  it('isolates recurring subtask state by cycle and keeps manual completion independent', async () => {
+  it('keeps recurring completion independent by cycle', async () => {
     const task = await todoRepository.saveTask(draft({
-      title: '收衣服', scheduledDate: '2026-10-12', subtasks: [{ id: 'a', title: '看天气', checked: false }],
+      title: '收衣服', scheduledDate: '2026-10-12',
       recurrence: { frequency: 'daily', interval: 1, startsOn: '2026-10-12', endsOn: null, weekdays: [] }
     }));
-    await todoRepository.setSubtaskChecked(task.id, '2026-10-13', 'a', true);
+    await todoRepository.setCompleted(task.id, '2026-10-13', true);
     const days = occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-13', '2026-10-14');
-    expect(days[0].subtasks[0].checked).toBe(true);
-    expect(days[0].completionSource).toBe('subtasks');
-    expect(days[1].subtasks[0].checked).toBe(false);
+    expect(days[0].completionSource).toBe('manual');
+    expect(days[0].completedAt).toBeTypeOf('number');
+    expect(days[1].completedAt).toBeNull();
+    expect(Object.keys((await todoRepository.listOccurrences())[0]).sort()).toEqual([
+      'completedAt', 'completionSource', 'key', 'override', 'periodDate', 'scheduledDate', 'skipped', 'taskId', 'updatedAt'
+    ]);
     await todoRepository.setCompleted(task.id, '2026-10-14', true);
-    await todoRepository.setSubtaskChecked(task.id, '2026-10-14', 'a', true);
     expect(occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-14', '2026-10-14')[0].completionSource).toBe('manual');
   });
 
@@ -171,7 +153,6 @@ describe('personal task repository', () => {
   it('keeps completed cycle history when the series rule changes from an effective date', async () => {
     const task = await todoRepository.saveTask(draft({
       title: '伸展', scheduledDate: '2026-10-12',
-      subtasks: [{ id: 'stretch', title: '肩颈拉伸', checked: false }],
       recurrence: { frequency: 'daily', interval: 1, startsOn: '2026-10-12', endsOn: null, weekdays: [] }
     }));
     await todoRepository.setCompleted(task.id, '2026-10-13', true);
@@ -187,14 +168,11 @@ describe('personal task repository', () => {
     expect(occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-15', '2026-10-15')).toHaveLength(1);
 
     await todoRepository.setCompleted(task.id, '2026-10-13', false);
-    await todoRepository.setSubtaskChecked(task.id, '2026-10-13', 'stretch', true);
     await todoRepository.saveOccurrenceOverride(task.id, '2026-10-13', { title: '规则变更后仍可编辑的历史周期' });
     const editedHistory = occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-13', '2026-10-13');
-    expect(editedHistory[0]).toMatchObject({ title: '规则变更后仍可编辑的历史周期', completionSource: 'subtasks' });
-    expect(editedHistory[0].completedAt).toBeTypeOf('number');
+    expect(editedHistory[0]).toMatchObject({ title: '规则变更后仍可编辑的历史周期', completionSource: null, completedAt: null });
     const changedMaster = (await todoRepository.listTasks())[0];
     expect(changedMaster.completedAt).toBeNull();
-    expect(changedMaster.subtasks[0]?.checked).toBe(false);
   });
 
   it('keeps the selected task as a one-off when a repeat series is stopped', async () => {
@@ -218,10 +196,9 @@ describe('personal task repository', () => {
     expect(afterCompletion.find((item) => item.periodDate === null)?.completedAt).toBeTypeOf('number');
   });
 
-  it('keeps historical completion, restoration, subtask changes, and edits separate after stopping a series', async () => {
+  it('keeps historical completion, restoration, and edits separate after stopping a series', async () => {
     const task = await todoRepository.saveTask(draft({
       title: '整理花园', scheduledDate: '2026-10-12',
-      subtasks: [{ id: 'water', title: '浇水', checked: false }],
       recurrence: { frequency: 'daily', interval: 1, startsOn: '2026-10-12', endsOn: null, weekdays: [] }
     }));
     await todoRepository.saveTask({ ...task, scheduledDate: '2026-10-14', recurrence: null }, '2026-10-14');
@@ -229,24 +206,19 @@ describe('personal task repository', () => {
     await todoRepository.setCompleted(task.id, '2026-10-13', true);
     expect((await todoRepository.listTasks())[0].completedAt).toBeNull();
     await todoRepository.setCompleted(task.id, '2026-10-13', false);
-    await todoRepository.setSubtaskChecked(task.id, '2026-10-13', 'water', true);
     await todoRepository.saveOccurrenceOverride(task.id, '2026-10-13', { title: '已停止系列中的历史编辑' });
 
     const historical = occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-13', '2026-10-13');
     expect(historical).toHaveLength(1);
-    expect(historical[0]).toMatchObject({ title: '已停止系列中的历史编辑', completionSource: 'subtasks', subtasks: [{ id: 'water', checked: true }] });
-    expect(historical[0].completedAt).toBeTypeOf('number');
+    expect(historical[0]).toMatchObject({ title: '已停止系列中的历史编辑', completionSource: null, completedAt: null });
 
-    await todoRepository.setSubtaskChecked(task.id, '2026-10-13', 'water', false);
     const restoredHistory = occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-13', '2026-10-13')[0];
     expect(restoredHistory.completedAt).toBeNull();
-    expect(restoredHistory.subtasks[0].checked).toBe(false);
 
     const oneOff = occurrencesInRange(await todoRepository.listTasks(), await todoRepository.listOccurrences(), '2026-10-14', '2026-10-14').find((item) => item.periodDate === null);
     const stoppedMaster = (await todoRepository.listTasks())[0];
     expect(oneOff?.completedAt).toBeNull();
     expect(stoppedMaster.completedAt).toBeNull();
-    expect(stoppedMaster.subtasks[0].checked).toBe(false);
   });
 
   it('persists editable reminder metadata, skips missed reminders, and schedules only future cycles', async () => {
@@ -286,5 +258,5 @@ describe('local calendar dates', () => {
 });
 
 function baseTask(date: '2026-10-12' | '2026-01-31'): PersonalTask {
-  return { id: 'repeat', title: '任务', note: '', scheduledDate: date, scheduledTime: null, tags: [], subtasks: [], createdAt: 0, updatedAt: 0, completedAt: null, completionSource: null, recurrence: null, recurrenceHistory: [], seriesId: null, reminder: { enabled: false, minutesBefore: 10 } };
+  return { id: 'repeat', title: '任务', note: '', scheduledDate: date, scheduledTime: null, tags: [], createdAt: 0, updatedAt: 0, completedAt: null, completionSource: null, recurrence: null, recurrenceHistory: [], seriesId: null, reminder: { enabled: false, minutesBefore: 10 } };
 }

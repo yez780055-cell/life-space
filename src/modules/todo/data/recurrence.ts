@@ -89,8 +89,6 @@ export function nextOccurrenceDate(rule: RecurrenceRule, from: DateKey): DateKey
 
 function makeInstance(task: PersonalTask, periodDate: DateKey | null, occurrence?: TaskOccurrence): TaskInstance {
   const override = occurrence?.override ?? {};
-  const subtaskTemplate = override.subtasks ?? task.subtasks;
-  const subtasks = subtaskTemplate.map((subtask) => ({ ...subtask, checked: occurrence?.subtaskChecks[subtask.id] ?? subtask.checked }));
   return {
     instanceKey: periodDate ? occurrenceKey(task.id, periodDate) : task.id,
     taskId: task.id,
@@ -100,7 +98,6 @@ function makeInstance(task: PersonalTask, periodDate: DateKey | null, occurrence
     scheduledDate: override.scheduledDate ?? occurrence?.scheduledDate ?? periodDate ?? task.scheduledDate,
     scheduledTime: override.scheduledTime ?? task.scheduledTime,
     tags: override.tags ?? task.tags,
-    subtasks,
     completedAt: occurrence ? occurrence.completedAt : (periodDate === null || task.seriesId === null ? task.completedAt : null),
     completionSource: occurrence ? occurrence.completionSource : (periodDate === null || task.seriesId === null ? task.completionSource : null),
     recurrence: task.recurrence,

@@ -380,6 +380,8 @@ try {
     finally { database.close(); }
   });
   if (!restoredTask || restoredTask.completedAt !== null) throw new Error(`Restored task did not remain pending after reload: ${JSON.stringify(restoredTask)}`);
+  const expectedTaskFields = ['completionSource', 'completedAt', 'createdAt', 'id', 'note', 'recurrence', 'recurrenceHistory', 'reminder', 'scheduledDate', 'scheduledTime', 'seriesId', 'tags', 'title', 'updatedAt'];
+  if (JSON.stringify(Object.keys(restoredTask).sort()) !== JSON.stringify(expectedTaskFields.sort())) throw new Error(`Saved task has an unexpected data shape: ${JSON.stringify(Object.keys(restoredTask).sort())}`);
   await page.getByRole('button', { name: '完成任务：第二件事' }).click();
   await page.waitForFunction(async () => {
     const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -387,49 +389,10 @@ try {
     finally { database.close(); }
   });
 
-  const legacySubtasks = [
-    { id: 'legacy-a', title: '旧子任务A', checked: true },
-    { id: 'legacy-b', title: '旧子任务B', checked: false }
-  ];
-  await page.evaluate(async (subtasks) => {
-    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    try {
-      await new Promise((resolve, reject) => {
-        const tx = database.transaction('todoTasks', 'readwrite');
-        const store = tx.objectStore('todoTasks');
-        const request = store.getAll();
-        request.onsuccess = () => {
-          const task = request.result.find((record) => record.title === '浏览日期任务');
-          if (!task) { tx.abort(); reject(new Error('Could not seed the synthetic legacy task')); return; }
-          task.subtasks = subtasks;
-          task.completedAt = null;
-          task.completionSource = null;
-          store.put(task);
-        };
-        request.onerror = () => reject(request.error);
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error ?? new Error('Could not seed the synthetic legacy task'));
-      });
-    } finally { database.close(); }
-  }, legacySubtasks);
-  await page.reload();
-  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
-  await waitForTodoData(page);
-  await page.getByRole('button', { name: '全部' }).click();
-  await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
-  if (await page.getByText('旧子任务A', { exact: true }).count() || await page.getByText('旧子任务B', { exact: true }).count()) throw new Error('Legacy subtasks were rendered on the Personal Todo home');
-  if (await page.getByText('1/2', { exact: true }).count()) throw new Error('Legacy subtask progress was rendered on the Personal Todo home');
-  if (await page.getByRole('button', { name: /子任务/ }).count()) throw new Error('A subtask control was rendered on the Personal Todo home');
-  if (await page.locator('.todo-minimal-subtask-progress,.todo-minimal-subtasks,.todo-minimal-subtask').count()) throw new Error('Legacy subtask UI selectors remain on the Personal Todo home');
-
   await page.getByRole('button', { name: '编辑任务：浏览日期任务' }).click();
   const editor = page.getByRole('dialog', { name: '编辑任务' });
   await editor.waitFor();
   await shot(page, 'todo-desktop-edit.png');
-  if (await editor.getByText(/子任务/).count()) throw new Error('The task editor still exposes subtask content');
-  if (await editor.getByRole('button', { name: /子任务/ }).count()) throw new Error('The task editor still exposes subtask actions');
-  if (await editor.locator('[class*="subtask"]').count()) throw new Error('The task editor still contains subtask UI selectors');
   const saveEditor = editor;
   await saveEditor.getByRole('textbox', { name: '任务内容' }).fill('更新后的任务');
   const movedDate = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() + 3); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
@@ -452,13 +415,6 @@ try {
   await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
   await page.getByText('14:30', { exact: true }).waitFor();
   await page.getByText('运营', { exact: true }).waitFor();
-  const savedLegacySubtasks = await page.evaluate(async () => {
-    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    try { return await new Promise((resolve, reject) => { const request = database.transaction('todoTasks', 'readonly').objectStore('todoTasks').getAll(); request.onsuccess = () => resolve(request.result.find((task) => task.title === '更新后的任务')?.subtasks); request.onerror = () => reject(request.error); }); }
-    finally { database.close(); }
-  });
-  if (JSON.stringify(savedLegacySubtasks) !== JSON.stringify(legacySubtasks)) throw new Error(`Editing other fields changed the legacy subtask data: ${JSON.stringify(savedLegacySubtasks)}`);
-
   await page.getByRole('button', { name: '按日期' }).click();
   await page.getByRole('button', { name: '后一天' }).click();
   await page.getByRole('button', { name: '回到今天' }).waitFor();

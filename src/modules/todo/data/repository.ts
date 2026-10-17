@@ -30,14 +30,40 @@ function readAll<T>(storeName: string): Promise<T[]> {
 }
 
 function emptyOccurrence(taskId: string, periodDate: DateKey): TaskOccurrence {
-  return { key: occurrenceKey(taskId, periodDate), taskId, periodDate, scheduledDate: periodDate, completedAt: null, completionSource: null, subtaskChecks: {}, override: {}, skipped: false, updatedAt: Date.now() };
+  return { key: occurrenceKey(taskId, periodDate), taskId, periodDate, scheduledDate: periodDate, completedAt: null, completionSource: null, override: {}, skipped: false, updatedAt: Date.now() };
 }
 
-function syncSubtaskCompletion(subtasks: PersonalTask['subtasks'], completedAt: number | null, source: PersonalTask['completionSource']) {
-  const allChecked = subtasks.length > 0 && subtasks.every((subtask) => subtask.checked);
-  if (allChecked && !completedAt) return { completedAt: Date.now(), completionSource: 'subtasks' as const };
-  if (!allChecked && source === 'subtasks') return { completedAt: null, completionSource: null };
-  return { completedAt, completionSource: source };
+function normalizeOccurrence(occurrence: TaskOccurrence | undefined, taskId: string, periodDate: DateKey): TaskOccurrence {
+  const current = occurrence ?? emptyOccurrence(taskId, periodDate);
+  const source = current.override ?? {};
+  const override: TaskOverride = {};
+  if (source.title !== undefined) override.title = source.title;
+  if (source.note !== undefined) override.note = source.note;
+  if (source.scheduledDate !== undefined) override.scheduledDate = source.scheduledDate;
+  if (source.scheduledTime !== undefined) override.scheduledTime = source.scheduledTime;
+  if (source.tags !== undefined) override.tags = [...source.tags];
+  if (source.reminder !== undefined) override.reminder = { ...source.reminder };
+  return {
+    key: occurrenceKey(taskId, periodDate), taskId, periodDate,
+    scheduledDate: current.scheduledDate ?? periodDate,
+    completedAt: current.completedAt ?? null,
+    completionSource: current.completionSource === 'manual' ? 'manual' : null,
+    override, skipped: Boolean(current.skipped), updatedAt: current.updatedAt ?? Date.now()
+  };
+}
+
+function normalizeTask(task: PersonalTask): PersonalTask {
+  return {
+    id: task.id, title: task.title, note: task.note,
+    scheduledDate: task.scheduledDate, scheduledTime: task.scheduledTime,
+    tags: [...task.tags], createdAt: task.createdAt, updatedAt: task.updatedAt,
+    completedAt: task.completedAt ?? null,
+    completionSource: task.completionSource === 'manual' ? 'manual' : null,
+    recurrence: task.recurrence ? { ...task.recurrence, weekdays: [...task.recurrence.weekdays] } : null,
+    recurrenceHistory: (task.recurrenceHistory ?? []).map((rule) => ({ ...rule, weekdays: [...rule.weekdays] })),
+    seriesId: task.seriesId ?? null,
+    reminder: { ...task.reminder }
+  };
 }
 
 function isRecurringPeriod(task: PersonalTask, periodDate: DateKey): boolean {
@@ -60,7 +86,6 @@ export const todoRepository = {
       const existingRequest = draft.id ? store.get(draft.id) : undefined;
       const save = (existing?: PersonalTask) => {
         const id = draft.id ?? newId();
-        const subtasksUnchanged = Boolean(existing) && JSON.stringify(draft.subtasks) === JSON.stringify(existing?.subtasks ?? []);
         const recurrenceHistory = [...(existing?.recurrenceHistory ?? draft.recurrenceHistory ?? [])];
         let recurrence = draft.recurrence;
         if (existing?.recurrence && effectiveFrom && JSON.stringify(existing.recurrence) !== JSON.stringify(draft.recurrence)) {
@@ -72,29 +97,21 @@ export const todoRepository = {
           recurrence = draft.recurrence ? { ...draft.recurrence, startsOn: draft.recurrence.startsOn < effectiveFrom ? effectiveFrom : draft.recurrence.startsOn } : null;
         }
         saved = {
-          ...existing,
-          ...draft,
           id,
           title: draft.title.trim(),
           note: draft.note.trim(),
+          scheduledDate: draft.scheduledDate,
+          scheduledTime: draft.scheduledTime,
           tags: [...new Set(draft.tags)],
-          subtasks: subtasksUnchanged
-            ? (existing?.subtasks ?? []).map((item) => ({ ...item }))
-            : draft.subtasks.filter((item) => item.title.trim()).map((item) => ({ ...item, title: item.title.trim() })),
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
           completedAt: existing?.completedAt ?? null,
-          completionSource: existing?.completionSource ?? null,
+          completionSource: existing?.completionSource === 'manual' ? 'manual' : null,
           recurrence,
           recurrenceHistory,
           seriesId: recurrence || recurrenceHistory.length > 0 ? (existing?.seriesId ?? id) : null,
           reminder: { enabled: draft.reminder.enabled, minutesBefore: Math.max(0, Math.min(1440, draft.reminder.minutesBefore)) }
         };
-        if (!saved.recurrence && !subtasksUnchanged) {
-          const completion = syncSubtaskCompletion(saved.subtasks, saved.completedAt, saved.completionSource);
-          saved.completedAt = completion.completedAt;
-          saved.completionSource = completion.completionSource;
-        }
         store.put(saved);
       };
       if (!existingRequest) save();
@@ -108,7 +125,7 @@ export const todoRepository = {
   },
 
   async createQuickTask(title: string, scheduledDate: DateKey | null = null): Promise<PersonalTask> {
-    return this.saveTask({ title, note: '', scheduledDate, scheduledTime: null, tags: [], subtasks: [], recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 } });
+    return this.saveTask({ title, note: '', scheduledDate, scheduledTime: null, tags: [], recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 } });
   },
 
   async deleteTask(taskId: string): Promise<void> {
@@ -139,8 +156,7 @@ export const todoRepository = {
           const store = tx.objectStore('todoOccurrences');
           const occurrenceRequest = store.get(occurrenceKey(taskId, periodDate));
           occurrenceRequest.onsuccess = () => {
-            const occurrence = (occurrenceRequest.result as TaskOccurrence | undefined) ?? emptyOccurrence(taskId, periodDate);
-            occurrence.override.subtasks ??= task.subtasks.map((subtask) => ({ ...subtask }));
+            const occurrence = normalizeOccurrence(occurrenceRequest.result as TaskOccurrence | undefined, taskId, periodDate);
             occurrence.completedAt = completed ? now : null;
             occurrence.completionSource = completed ? 'manual' : null;
             occurrence.updatedAt = now;
@@ -148,48 +164,7 @@ export const todoRepository = {
           };
           occurrenceRequest.onerror = () => fail(occurrenceRequest.error ?? new Error('读取任务周期失败'));
         } else {
-          task.completedAt = completed ? now : null;
-          task.completionSource = completed ? 'manual' : null;
-          task.updatedAt = now;
-          taskStore.put(task);
-        }
-      };
-      request.onerror = () => fail(request.error ?? new Error('读取任务失败'));
-    });
-  },
-
-  async setSubtaskChecked(taskId: string, periodDate: DateKey | null, subtaskId: string, checked: boolean): Promise<void> {
-    const stores = periodDate ? ['todoTasks', 'todoOccurrences'] : ['todoTasks'];
-    await transaction(stores, 'readwrite', (tx, fail) => {
-      const taskStore = tx.objectStore('todoTasks');
-      const request = taskStore.get(taskId);
-      request.onsuccess = () => {
-        const task = request.result as PersonalTask | undefined;
-        if (!task) return fail(new Error('找不到这项任务，请刷新后重试。'));
-        const now = Date.now();
-        if (periodDate) {
-          if (!isRecurringPeriod(task, periodDate)) return fail(new Error('找不到这项重复任务周期，请刷新后重试。'));
-          const store = tx.objectStore('todoOccurrences');
-          const occurrenceRequest = store.get(occurrenceKey(taskId, periodDate));
-          occurrenceRequest.onsuccess = () => {
-            const occurrence = (occurrenceRequest.result as TaskOccurrence | undefined) ?? emptyOccurrence(taskId, periodDate);
-            occurrence.override.subtasks ??= task.subtasks.map((subtask) => ({ ...subtask }));
-            occurrence.subtaskChecks[subtaskId] = checked;
-            const current = (occurrence.override.subtasks ?? task.subtasks).map((subtask) => ({ ...subtask, checked: occurrence.subtaskChecks[subtask.id] ?? subtask.checked }));
-            const completion = syncSubtaskCompletion(current, occurrence.completedAt, occurrence.completionSource);
-            occurrence.completedAt = completion.completedAt;
-            occurrence.completionSource = completion.completionSource;
-            occurrence.updatedAt = now;
-            store.put(occurrence);
-          };
-          occurrenceRequest.onerror = () => fail(occurrenceRequest.error ?? new Error('读取任务周期失败'));
-        } else {
-          task.subtasks = task.subtasks.map((subtask) => subtask.id === subtaskId ? { ...subtask, checked } : subtask);
-          const completion = syncSubtaskCompletion(task.subtasks, task.completedAt, task.completionSource);
-          task.completedAt = completion.completedAt;
-          task.completionSource = completion.completionSource;
-          task.updatedAt = now;
-          taskStore.put(task);
+          taskStore.put({ ...normalizeTask(task), completedAt: completed ? now : null, completionSource: completed ? 'manual' : null, updatedAt: now });
         }
       };
       request.onerror = () => fail(request.error ?? new Error('读取任务失败'));
@@ -201,15 +176,17 @@ export const todoRepository = {
       const store = tx.objectStore('todoOccurrences');
       const request = store.get(occurrenceKey(taskId, periodDate));
       request.onsuccess = () => {
-        const occurrence = (request.result as TaskOccurrence | undefined) ?? emptyOccurrence(taskId, periodDate);
-        occurrence.override = { ...occurrence.override, ...override };
+        const occurrence = normalizeOccurrence(request.result as TaskOccurrence | undefined, taskId, periodDate);
+        occurrence.override = {
+          ...occurrence.override,
+          ...(override.title !== undefined ? { title: override.title } : {}),
+          ...(override.note !== undefined ? { note: override.note } : {}),
+          ...(override.scheduledDate !== undefined ? { scheduledDate: override.scheduledDate } : {}),
+          ...(override.scheduledTime !== undefined ? { scheduledTime: override.scheduledTime } : {}),
+          ...(override.tags !== undefined ? { tags: [...override.tags] } : {}),
+          ...(override.reminder !== undefined ? { reminder: { ...override.reminder } } : {})
+        };
         occurrence.scheduledDate = override.scheduledDate ?? occurrence.scheduledDate;
-        if (override.subtasks) {
-          occurrence.subtaskChecks = Object.fromEntries(override.subtasks.map((subtask) => [subtask.id, subtask.checked]));
-          const completion = syncSubtaskCompletion(override.subtasks, occurrence.completedAt, occurrence.completionSource);
-          occurrence.completedAt = completion.completedAt;
-          occurrence.completionSource = completion.completionSource;
-        }
         occurrence.skipped = false;
         occurrence.updatedAt = Date.now();
         store.put(occurrence);
@@ -223,7 +200,7 @@ export const todoRepository = {
       const store = tx.objectStore('todoOccurrences');
       const request = store.get(occurrenceKey(taskId, periodDate));
       request.onsuccess = () => {
-        const occurrence = (request.result as TaskOccurrence | undefined) ?? emptyOccurrence(taskId, periodDate);
+        const occurrence = normalizeOccurrence(request.result as TaskOccurrence | undefined, taskId, periodDate);
         occurrence.skipped = true;
         occurrence.updatedAt = Date.now();
         store.put(occurrence);

@@ -87,9 +87,8 @@ describe('minimal personal Todo', () => {
 
   it('groups same-day tasks into one divided list and shows only available row metadata', async () => {
     const tag = await todoRepository.upsertTag('亚马逊');
-    const taskWithSubtasks = await todoRepository.saveTask({
+    await todoRepository.saveTask({
       title: '完成 Listing 图片修改', note: '', scheduledDate: todayKey(), scheduledTime: '14:30', tags: [tag.id],
-      subtasks: [{ id: 'main-image', title: '拍摄主图', checked: true }, { id: 'a-plus', title: '制作 A+ 页面', checked: false }],
       recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
     });
     await todoRepository.createQuickTask('整理广告报表', todayKey());
@@ -103,47 +102,14 @@ describe('minimal personal Todo', () => {
     expect(todayGroup?.querySelectorAll('[data-testid="todo-task-row"]')).toHaveLength(2);
     expect(within(todayGroup as HTMLElement).getByText('14:30')).toBeTruthy();
     expect(within(todayGroup as HTMLElement).getByText('亚马逊')).toBeTruthy();
-    expect(within(todayGroup as HTMLElement).queryByText('1/2')).toBeNull();
-    expect(within(todayGroup as HTMLElement).queryByText('拍摄主图')).toBeNull();
-    expect(within(todayGroup as HTMLElement).queryByText('制作 A+ 页面')).toBeNull();
-    expect(within(todayGroup as HTMLElement).queryByRole('button', { name: /子任务/ })).toBeNull();
-    expect(todayGroup?.querySelector('.todo-minimal-subtask-progress, .todo-minimal-subtasks, .todo-minimal-subtask')).toBeNull();
     const plainRow = within(todayGroup as HTMLElement).getAllByTestId('todo-task-row')[0];
     const rows = todayGroup?.querySelectorAll<HTMLElement>('[data-testid="todo-task-row"]');
     expect(rows?.[0].querySelector('.todo-minimal-task-meta')).toBeNull();
     expect(plainRow.querySelector('.todo-minimal-task-title')?.textContent).toContain('整理广告报表');
 
-    expect((await todoRepository.listTasks()).find((task) => task.id === taskWithSubtasks.id)?.subtasks).toEqual([
-      { id: 'main-image', title: '拍摄主图', checked: true },
-      { id: 'a-plus', title: '制作 A+ 页面', checked: false }
-    ]);
-
     fireEvent.click(screen.getByRole('button', { name: '全部' }));
     expect(document.querySelectorAll('.todo-minimal-date-group')).toHaveLength(2);
     expect(screen.getByRole('heading', { name: /明天 ·/ })).toBeTruthy();
-  });
-
-  it('uses only the main task completion state even when hidden legacy subtasks are checked', async () => {
-    const task = await todoRepository.saveTask({
-      title: '旧清单任务', note: '', scheduledDate: todayKey(), scheduledTime: null, tags: [],
-      subtasks: [{ id: 'legacy-a', title: '旧步骤A', checked: false }, { id: 'legacy-b', title: '旧步骤B', checked: false }],
-      recurrence: null, recurrenceHistory: [], reminder: { enabled: false, minutesBefore: 10 }
-    });
-    await todoRepository.setSubtaskChecked(task.id, null, 'legacy-a', true);
-    await todoRepository.setSubtaskChecked(task.id, null, 'legacy-b', true);
-    await todoRepository.setCompleted(task.id, null, false);
-
-    render(<App/>);
-    expect(await screen.findByRole('button', { name: '完成任务：旧清单任务' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '已完成 0 项' })).toBeTruthy();
-    expect(screen.queryByText('旧步骤A')).toBeNull();
-    expect(screen.queryByText('旧步骤B')).toBeNull();
-    const visibleTask = (await todoRepository.listTasks()).find(({ id }) => id === task.id)!;
-    expect(visibleTask.completedAt).toBeNull();
-    expect(visibleTask.subtasks).toEqual([
-      { id: 'legacy-a', title: '旧步骤A', checked: true },
-      { id: 'legacy-b', title: '旧步骤B', checked: true }
-    ]);
   });
 
   it('quick-add focuses the title, uses the selected date, stays open for repeated entry, and rejects blank titles', async () => {
@@ -176,8 +142,6 @@ describe('minimal personal Todo', () => {
     fireEvent.submit(dialog);
     await waitFor(async () => expect(await todoRepository.listTasks()).toHaveLength(1));
     expect((await todoRepository.listTasks())[0]).toMatchObject({ title: '浇花', scheduledDate: selected });
-    expect(document.querySelector('[class*="subtask"]')).toBeNull();
-    expect(screen.queryByText(/子任务/)).toBeNull();
     expect(screen.getByRole('dialog', { name: '快速添加' })).toBeTruthy();
     await waitFor(() => expect((screen.getByRole('textbox', { name: '任务内容' }) as HTMLInputElement).value).toBe(''));
 
@@ -300,16 +264,13 @@ describe('minimal personal Todo', () => {
     const existingTag = await todoRepository.upsertTag('家务');
     const task = await todoRepository.saveTask({
       title: '准备植物换盆', note: '先铺报纸', scheduledDate: originalDate, scheduledTime: '18:30',
-      tags: [existingTag.id], subtasks: [{ id: 'soil', title: '买土', checked: true }, { id: 'drainage', title: '检查排水', checked: false }], recurrence: null, recurrenceHistory: [],
+      tags: [existingTag.id], recurrence: null, recurrenceHistory: [],
       reminder: { enabled: true, minutesBefore: 20 }
     });
     render(<App/>);
     await screen.findByRole('button', { name: '编辑任务：准备植物换盆' });
     fireEvent.click(screen.getByRole('button', { name: '编辑任务：准备植物换盆' }));
     const editor = await screen.findByRole('dialog', { name: '编辑任务' });
-    expect(within(editor).queryByText(/子任务/)).toBeNull();
-    expect(within(editor).queryByRole('button', { name: /子任务/ })).toBeNull();
-    expect(editor.querySelector('[class*="subtask"]')).toBeNull();
     fireEvent.change(within(editor).getByRole('textbox', { name: '任务内容' }), { target: { value: '给绿萝换盆' } });
     const newDate = addDays(originalDate, 1);
     fireEvent.change(within(editor).getByLabelText('任务日期'), { target: { value: newDate } });
@@ -325,7 +286,6 @@ describe('minimal personal Todo', () => {
     const saved = (await todoRepository.listTasks()).find((record) => record.id === task.id)!;
     const savedTag = (await todoRepository.listTags()).find((tag) => tag.name === '阳台');
     expect(saved).toMatchObject({ title: '给绿萝换盆', note: '先检查花盆排水孔', scheduledTime: '19:15', tags: [savedTag?.id], reminder: { enabled: true, minutesBefore: 30 }, completedAt: null, recurrence: null });
-    expect(saved.subtasks).toEqual([{ id: 'soil', title: '买土', checked: true }, { id: 'drainage', title: '检查排水', checked: false }]);
     expect(await todoRepository.listTasks()).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '全部' }));
     expect(await screen.findByRole('button', { name: '完成任务：给绿萝换盆' })).toBeTruthy();
@@ -335,7 +295,7 @@ describe('minimal personal Todo', () => {
     const start = todayKey();
     const historicalDate = addDays(start, -2);
     const task = await todoRepository.saveTask({
-      title: '每日服药', note: '', scheduledDate: null, scheduledTime: null, tags: [], subtasks: [],
+      title: '每日服药', note: '', scheduledDate: null, scheduledTime: null, tags: [],
       recurrence: null, recurrenceHistory: [{ frequency: 'daily', interval: 1, startsOn: historicalDate, endsOn: addDays(start, -1), weekdays: [] }],
       reminder: { enabled: false, minutesBefore: 10 }
     });
