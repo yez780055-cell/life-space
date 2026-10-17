@@ -307,7 +307,7 @@ describe('minimal personal Todo', () => {
 
     render(<App/>);
     await screen.findByRole('button', { name: '编辑任务：整理旅行清单' });
-    fireEvent.click(screen.getByRole('button', { name: '编辑任务：整理旅行清单' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：整理旅行清单' }));
     let editor = await screen.findByRole('dialog', { name: '编辑任务' });
     expect(editor.querySelector('.todo-minimal-editor-section-heading small')?.textContent).toBe('0/2');
     fireEvent.click(within(editor).getByRole('button', { name: '删除子任务：准备充电器' }));
@@ -317,7 +317,7 @@ describe('minimal personal Todo', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑任务' })).toBeNull());
     expect((await todoRepository.listTasks()).find((record) => record.id === task.id)?.subtasks.map(({ id }) => id)).toEqual(['tickets', 'charger']);
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑任务：整理旅行清单' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑任务：整理旅行清单' }));
     editor = await screen.findByRole('dialog', { name: '编辑任务' });
     fireEvent.click(within(editor).getByRole('button', { name: '删除子任务：准备充电器' }));
     fireEvent.click(within(editor).getByRole('button', { name: '保存' }));
