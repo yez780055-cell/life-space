@@ -3,11 +3,11 @@ import { createPortal } from 'react-dom';
 import type { NavigationSnapshot, TodoScreen, TodoSpace } from '../../app/navigation/model';
 import { Icon } from '../../shared/ui/icons';
 import { addDays, fromDateKey, todayKey } from './data/dates';
-import type { DateKey, PersonalTask, TaskInstance } from './data/model';
+import type { DateKey, PersonalTag, PersonalTask, TaskInstance } from './data/model';
 import { allInstances, occurrencesInRange } from './data/recurrence';
 import { reminderSchedule } from './data/reminders';
 import { todoRepository } from './data/repository';
-import { MinimalTaskEditor, PersonalTodoView, trapDialogKeyboard } from './PersonalTodoView';
+import { MinimalTaskEditor, PersonalTodoView, trapDialogKeyboard, type MinimalTaskDraft } from './PersonalTodoView';
 import { CoupleEditorPage, CoupleHistoryFilterDialog, CoupleHistoryPage, CoupleHome } from './couple/CoupleViews';
 import { DEFAULT_COUPLE_HISTORY_RANGE, type CoupleHistoryRange, type CoupleItem, type CoupleItemDraft, type CoupleTag } from './couple/model';
 import { useCoupleTodo } from './couple/useCoupleTodo';
@@ -128,6 +128,7 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const [selectedDate, setSelectedDate] = useState<DateKey>(() => todayKey());
   const [allView, setAllView] = useState(false);
   const [taskRecords, setTaskRecords] = useState<PersonalTask[]>([]);
+  const [personalTagRecords, setPersonalTagRecords] = useState<PersonalTag[]>([]);
   const [occurrenceRecords, setOccurrenceRecords] = useState<Awaited<ReturnType<typeof todoRepository.listOccurrences>>>([]);
   const [completionOverrides, setCompletionOverrides] = useState<Map<string, boolean>>(() => new Map());
   const completionOverridesRef = useRef(completionOverrides);
@@ -159,11 +160,12 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const sentReminders = useRef<Set<string>>(new Set());
 
   const refreshData = useCallback(async () => {
-    const [nextTasks, nextOccurrences] = await Promise.all([
-      todoRepository.listTasks(), todoRepository.listOccurrences()
+    const [nextTasks, nextOccurrences, nextTags] = await Promise.all([
+      todoRepository.listTasks(), todoRepository.listOccurrences(), todoRepository.listTags()
     ]);
     setTaskRecords(nextTasks);
     setOccurrenceRecords(nextOccurrences);
+    setPersonalTagRecords(nextTags);
     setDataError("");
     setDataLoading(false);
   }, []);
@@ -445,13 +447,33 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     onScreenChange('personal-editor');
   };
 
-  const saveMinimalTask = async (title: string, date: DateKey | null) => {
+  const saveMinimalTask = async (draft: MinimalTaskDraft) => {
     if (!selectedTask || !selectedBase) throw new Error('找不到正在编辑的任务，请刷新后重试。');
     try {
+      const tagIds = [...draft.tags];
+      for (const name of draft.newTags) tagIds.push((await todoRepository.upsertTag(name)).id);
+      const taskTags = [...new Set(tagIds)];
       if (selectedTask.periodDate && selectedBase.seriesId) {
-        await todoRepository.saveOccurrenceOverride(selectedBase.id, selectedTask.periodDate, { title, scheduledDate: date ?? selectedTask.periodDate });
+        await todoRepository.saveOccurrenceOverride(selectedBase.id, selectedTask.periodDate, {
+          title: draft.title,
+          scheduledDate: draft.date ?? selectedTask.periodDate,
+          scheduledTime: draft.time,
+          note: draft.note,
+          tags: taskTags,
+          subtasks: draft.subtasks,
+          reminder: draft.reminder
+        });
       } else {
-        await todoRepository.saveTask({ ...selectedBase, title, scheduledDate: date });
+        await todoRepository.saveTask({
+          ...selectedBase,
+          title: draft.title,
+          scheduledDate: draft.date,
+          scheduledTime: draft.time,
+          note: draft.note,
+          tags: taskTags,
+          subtasks: draft.subtasks,
+          reminder: draft.reminder
+        });
       }
       await refreshData();
       onNotice('任务已保存。');
@@ -482,8 +504,17 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
     pendingTasks: pendingInstances,
     completedTasks: completedInstances,
     onToggleTask: handleTaskToggle,
+    onToggleSubtask: async (task: TaskInstance, subtaskId: string, checked: boolean) => {
+      try {
+        await todoRepository.setSubtaskChecked(task.taskId, task.periodDate, subtaskId, checked);
+        await refreshData();
+      } catch (error) {
+        onNotice(error instanceof Error ? error.message : '子任务状态保存失败，请重试。');
+      }
+    },
     onEditTask: openTaskEditor,
-    onOpenAdd: (trigger: HTMLElement) => openPersonalAdd(allView ? todayKey() : selectedDate, trigger)
+    onOpenAdd: (trigger: HTMLElement) => openPersonalAdd(allView ? todayKey() : selectedDate, trigger),
+    tagLabels: Object.fromEntries(personalTagRecords.map((tag) => [tag.id, tag.name]))
   };
   const captureToggleButton = (button: HTMLButtonElement | null) => { if (button) spaceToggleRef.current = button; };
   const personalHome = <PersonalTodoView {...personalHomeProps} toggleRef={captureToggleButton}/>;
@@ -518,6 +549,7 @@ export function TodoModule({ snapshot, onSpaceChange, onScreenChange, showSurfac
   const closeTaskEditor = () => { setSelectedTask(null); onBack(); };
   const personalEditorOverlay = active && isPersonalEditor && selectedTask && selectedBase ? createPortal(<MinimalTaskEditor
     task={selectedTask}
+    tagOptions={personalTagRecords}
     removesSeriesHistory={selectedBase.seriesId !== null && selectedTask.periodDate === null && selectedBase.recurrenceHistory.length > 0}
     onClose={closeTaskEditor}
     onSave={saveMinimalTask}

@@ -297,7 +297,7 @@ try {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto(url);
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await waitForTodoData(page);
   await shot(page, 'todo-desktop-date.png');
 
@@ -330,6 +330,11 @@ try {
   await page.getByRole('button', { name: '全部' }).click();
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).waitFor();
   await page.getByRole('button', { name: '完成任务：第二件事' }).waitFor();
+  const sameDateGroup = page.locator(`.todo-minimal-date-group[data-date-key="${expectedDate}"]`);
+  await sameDateGroup.waitFor();
+  if (await sameDateGroup.locator('[data-testid="todo-task-row"]').count() !== 2) throw new Error('All view did not place the same-day tasks in one date group');
+  if (await page.locator('.todo-minimal-date-group').count() !== 1) throw new Error('All view rendered an empty or unexpected date group');
+  if (await sameDateGroup.locator('.todo-minimal-task-list').count() !== 1) throw new Error('Date group does not use one shared task container');
   await shot(page, 'todo-desktop-all.png');
 
   await page.getByRole('button', { name: '完成任务：浏览日期任务' }).click();
@@ -351,25 +356,49 @@ try {
   });
 
   await page.getByRole('button', { name: '编辑任务：浏览日期任务' }).click();
-  const editor = page.getByRole('dialog', { name: '编辑待办' });
+  const editor = page.getByRole('dialog', { name: '编辑任务' });
   await editor.waitFor();
   await shot(page, 'todo-desktop-edit.png');
   await editor.getByRole('textbox', { name: '任务内容' }).fill('更新后的任务');
   const movedDate = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() + 3); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
   await editor.getByLabel('任务日期').fill(movedDate);
+  await editor.getByLabel('任务时间').fill('14:30');
+  await editor.getByLabel('备注').fill('浏览器验证的任务备注');
+  await editor.getByLabel('添加标签').fill('运营');
+  await editor.getByRole('button', { name: '添加', exact: true }).click();
+  await editor.getByLabel('添加子任务').fill('整理主图');
+  await editor.getByRole('button', { name: '添加子任务' }).click();
+  await editor.getByLabel('添加子任务').fill('导出图片');
+  await editor.getByRole('button', { name: '添加子任务' }).click();
+  await page.setViewportSize({ width: 390, height: 360 });
+  const editMetrics = await editor.evaluate((element) => {
+    const fields = element.querySelector('.todo-minimal-editor-fields');
+    const save = element.querySelector('footer button[type="submit"]');
+    const box = save?.getBoundingClientRect();
+    return { scrollHeight: fields?.scrollHeight ?? 0, clientHeight: fields?.clientHeight ?? 0, saveBottom: box?.bottom ?? Infinity, viewportHeight: window.innerHeight };
+  });
+  if (editMetrics.scrollHeight <= editMetrics.clientHeight || editMetrics.saveBottom > editMetrics.viewportHeight) throw new Error(`Task editor does not scroll with a reachable save action in a keyboard-sized viewport: ${JSON.stringify(editMetrics)}`);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await editor.getByRole('button', { name: '保存' }).click();
   await editor.waitFor({ state: 'detached' });
   await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
+  await page.getByText('14:30', { exact: true }).waitFor();
+  await page.getByText('运营', { exact: true }).waitFor();
+  const subtaskProgress = page.getByRole('button', { name: /展开子任务：更新后的任务，0\/2/ });
+  await subtaskProgress.waitFor();
+  await subtaskProgress.click();
+  await page.getByRole('button', { name: '完成子任务：整理主图' }).click();
+  await page.getByRole('button', { name: /收起子任务：更新后的任务，1\/2/ }).waitFor();
 
-  await page.getByRole('button', { name: '日期' }).click();
+  await page.getByRole('button', { name: '按日期' }).click();
   await page.getByRole('button', { name: '回到今天' }).waitFor();
-  const selectedDateHeading = await page.locator('.todo-minimal-header h1').textContent();
+  const selectedDateHeading = await page.locator('.todo-minimal-summary time').getAttribute('datetime');
   await swipe(page, '.todo-minimal-task-area', 290, 340, 130, 340);
-  await page.waitForFunction((previous) => document.querySelector('.todo-minimal-header h1')?.textContent !== previous, selectedDateHeading);
+  await page.waitForFunction((previous) => document.querySelector('.todo-minimal-summary time')?.getAttribute('datetime') !== previous, selectedDateHeading);
   await swipe(page, '.todo-minimal-task-area', 130, 340, 290, 340);
-  await page.waitForFunction((previous) => document.querySelector('.todo-minimal-header h1')?.textContent === previous, selectedDateHeading);
+  await page.waitForFunction((previous) => document.querySelector('.todo-minimal-summary time')?.getAttribute('datetime') === previous, selectedDateHeading);
   await swipe(page, '.todo-minimal-task-area', 200, 300, 202, 420);
-  if (await page.locator('.todo-minimal-header h1').textContent() !== selectedDateHeading) throw new Error('Vertical scrolling changed the selected date');
+  if (await page.locator('.todo-minimal-summary time').getAttribute('datetime') !== selectedDateHeading) throw new Error('Vertical scrolling changed the selected date');
   await shot(page, 'todo-desktop-date-swipe.png');
 
   const personalSpaceToggleBounds = await page.getByRole('button', { name: '进入情侣专区' }).boundingBox();
@@ -488,7 +517,7 @@ try {
 
   await page.getByRole('button', { name: '返回' }).click();
   await page.reload();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await page.getByRole('button', { name: '进入情侣专区' }).click();
   await waitForSpace(page, 'couple');
   for (const title of ['周末一起散步', '在家看电影', '周末野餐']) await coupleCard(page, title).waitFor();
@@ -576,7 +605,7 @@ try {
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
   await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '待办' }).click();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '小月历' }).click();
   await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
   await page.getByRole('button', { name: '输入 PIN' }).click();
@@ -622,7 +651,7 @@ try {
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
   await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '待办' }).click();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '小月历' }).click();
   await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
   await page.getByRole('button', { name: '输入 PIN' }).click();
@@ -637,11 +666,11 @@ try {
   await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '待办' }).click();
   if (await page.getByRole('button', { name: '回到今天' }).count()) await page.getByRole('button', { name: '回到今天' }).click();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
 
   await waitForLastModule(page, 'todo');
   await page.reload();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await page.getByRole('button', { name: '全部' }).click();
   await page.getByRole('button', { name: '完成任务：更新后的任务' }).waitFor();
   await page.locator('.todo-minimal-completed-toggle').click();
@@ -672,7 +701,7 @@ try {
   await page.context().setOffline(true);
   try {
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+    await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
     await desktopNav.getByRole('button', { name: '小月历' }).click();
     await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
   } finally { await page.context().setOffline(false); }
@@ -848,7 +877,7 @@ try {
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
   await page.getByRole('button', { name: '删除' }).click();
   await desktopNav.getByRole('button', { name: '待办' }).click();
-  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   if (await page.getByRole('alertdialog').count()) throw new Error('Switching modules left an Anniversary confirmation over Todo');
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
@@ -859,7 +888,7 @@ try {
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   const mobilePage = await mobile.newPage();
   await mobilePage.goto(url);
-  await mobilePage.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await mobilePage.getByRole('heading', { name: '个人待办', exact: true }).waitFor();
   await waitForTodoData(mobilePage);
   await shot(mobilePage, 'todo-mobile-date.png');
   const fab = mobilePage.getByRole('button', { name: '快速新增待办' });
@@ -884,6 +913,30 @@ try {
   await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).tap();
   await mobilePage.getByRole('button', { name: '撤销完成：手机上的任务' }).tap();
   await mobilePage.getByRole('button', { name: '完成任务：手机上的任务' }).waitFor();
+  await mobilePage.getByRole('button', { name: '编辑任务：手机上的任务' }).tap();
+  const mobileEditor = mobilePage.getByRole('dialog', { name: '编辑任务' });
+  await mobileEditor.waitFor();
+  await mobilePage.setViewportSize({ width: 390, height: 320 });
+  await mobileEditor.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
+  });
+  const mobileEditorMetrics = await mobileEditor.evaluate((element) => {
+    const fields = element.querySelector('.todo-minimal-editor-fields');
+    const save = element.querySelector('footer button[type="submit"]')?.getBoundingClientRect();
+    return { overflowY: fields ? window.getComputedStyle(fields).overflowY : '', scrollHeight: fields?.scrollHeight ?? 0, clientHeight: fields?.clientHeight ?? 0, saveBottom: save?.bottom ?? Infinity, viewportHeight: window.innerHeight };
+  });
+  if (mobileEditorMetrics.overflowY !== 'auto' || mobileEditorMetrics.scrollHeight <= mobileEditorMetrics.clientHeight || mobileEditorMetrics.saveBottom > mobileEditorMetrics.viewportHeight) throw new Error(`Mobile task editor does not preserve scrolling and visible save controls: ${JSON.stringify(mobileEditorMetrics)}`);
+  await mobileEditor.getByRole('button', { name: '取消编辑' }).tap();
+  await mobilePage.setViewportSize({ width: 390, height: 844 });
+  await mobilePage.getByRole('button', { name: '进入情侣专区' }).waitFor();
+  await mobilePage.evaluate(() => {
+    const selectors = '.todo-minimal-header h1,.todo-minimal-summary,.todo-minimal-date-group h2,.todo-minimal-task-title,.todo-minimal-task-meta,.todo-minimal-completed-toggle,.todo-minimal-empty';
+    for (const element of document.querySelectorAll(`.todo-personal-minimal ${selectors}`)) {
+      const currentSize = Number.parseFloat(getComputedStyle(element).fontSize);
+      if (Number.isFinite(currentSize)) element.style.setProperty('font-size', `${currentSize * 1.25}px`, 'important');
+    }
+  });
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 390) throw new Error('Personal Todo overflows at 390px with increased text sizing');
   await mobilePage.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(mobilePage, 'couple');
   const mobileCoupleDate = await mobilePage.evaluate(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; });
