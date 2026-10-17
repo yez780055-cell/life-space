@@ -28,6 +28,34 @@ async function readPeriodRecords(page) {
   });
 }
 
+async function readAnniversaryRecords(page) {
+  return page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('anniversaryRecords', 'readonly').objectStore('anniversaryRecords').getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+}
+
+async function readOtherFoundationStores(page) {
+  return page.evaluate(async () => {
+    const names = ['settings', 'modules', 'todoTasks', 'todoTags', 'todoOccurrences', 'coupleItems', 'coupleTags', 'periodRecords', 'periodSettings'];
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = database.transaction(names, 'readonly');
+        const values = {};
+        for (const name of names) {
+          const request = tx.objectStore(name).getAll();
+          request.onsuccess = () => { values[name] = request.result; };
+          request.onerror = () => reject(request.error);
+        }
+        tx.oncomplete = () => resolve(values);
+        tx.onerror = () => reject(tx.error);
+      });
+    } finally { database.close(); }
+  });
+}
+
 async function waitForPeriodCount(page, count) {
   await page.waitForFunction(async (expected) => {
     const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
@@ -488,7 +516,7 @@ try {
   await page.getByRole('dialog', { name: '小月历隐私锁' }).getByRole('button', { name: '解锁' }).click();
   await page.getByRole('heading', { name: '小月历设置' }).waitFor();
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
-  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '待办' }).click();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '小月历' }).click();
@@ -534,7 +562,7 @@ try {
   const restoredPeriodSettings = await readPeriodSettings(page);
   if (restoredPeriodSettings.referenceCycleLength !== 29 || restoredPeriodSettings.careMemo !== 'synthetic browser memo') throw new Error('Period settings did not persist through encrypted backup restore and page reload');
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
-  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '待办' }).click();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '小月历' }).click();
@@ -544,11 +572,11 @@ try {
   await page.getByRole('dialog', { name: '小月历隐私锁' }).getByRole('button', { name: '解锁' }).click();
   await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
-  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '设置' }).click();
   await page.getByRole('region', { name: '设置' }).waitFor();
   await page.locator('.settings-page').getByRole('button', { name: '返回' }).click();
-  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '待办' }).click();
   if (await page.getByRole('button', { name: '回到今天' }).count()) await page.getByRole('button', { name: '回到今天' }).click();
   await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
@@ -598,6 +626,56 @@ try {
   await waitForPeriodCount(page, 0);
   if ((await readPeriodSettings(page)).appLock.enabled) throw new Error('Clearing Period data from the lock screen did not reset its PIN');
   if (JSON.stringify(await readNonPeriodStores(page)) !== storesBeforeForgottenPinClear) throw new Error('Clearing Period data altered Todo, Couple, settings, or module data');
+
+  await desktopNav.getByRole('button', { name: '纪念日' }).click();
+  await page.getByRole('region', { name: '纪念日', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '还没有纪念日' }).waitFor();
+  const foundationBeforeAnniversary = JSON.stringify(await readOtherFoundationStores(page));
+  await page.getByRole('button', { name: '新建纪念日' }).click();
+  await page.getByLabel('名称').fill('浏览器年度纪念日');
+  await page.getByLabel('日期', { exact: true }).fill('2024-02-29');
+  await page.getByLabel('备注').fill('合成数据：周年测试');
+  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByRole('button', { name: '查看最近纪念日：浏览器年度纪念日' }).waitFor();
+  await page.getByRole('button', { name: '查看最近纪念日：浏览器年度纪念日' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  const yearlyBeforeEdit = (await readAnniversaryRecords(page)).find((record) => record.title === '浏览器年度纪念日');
+  if (!yearlyBeforeEdit || yearlyBeforeEdit.date !== '2024-02-29' || yearlyBeforeEdit.recurrence !== 'yearly') throw new Error(`Anniversary yearly record did not persist its original local date: ${JSON.stringify(yearlyBeforeEdit)}`);
+  await shot(page, 'anniversary-desktop-detail.png');
+  await page.getByRole('button', { name: '编辑' }).click();
+  await page.getByLabel('名称').fill('更新后的年度纪念日');
+  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  const yearlyAfterEdit = (await readAnniversaryRecords(page)).find((record) => record.title === '更新后的年度纪念日');
+  if (!yearlyAfterEdit || yearlyAfterEdit.id !== yearlyBeforeEdit.id || yearlyAfterEdit.createdAt !== yearlyBeforeEdit.createdAt) throw new Error('Anniversary edit changed the stable record ID or creation time');
+  await page.getByRole('button', { name: '返回' }).click();
+  await page.getByRole('button', { name: '新建纪念日' }).click();
+  await page.getByLabel('名称').fill('浏览器一次性日期');
+  await page.getByLabel('日期', { exact: true }).fill('2099-01-01');
+  await page.getByRole('radio', { name: /仅一次/ }).check();
+  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByRole('button', { name: '查看最近纪念日：更新后的年度纪念日' }).waitFor();
+  await shot(page, 'anniversary-desktop-home.png');
+  await page.getByRole('button', { name: '查看最近纪念日：更新后的年度纪念日' }).click();
+  await page.getByRole('button', { name: '删除' }).click();
+  await page.getByRole('alertdialog', { name: '删除这条纪念日？' }).waitFor();
+  await page.getByRole('button', { name: '保留' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  await page.getByRole('button', { name: '删除' }).click();
+  await page.getByRole('button', { name: '确认删除' }).click();
+  await page.getByRole('button', { name: '查看最近纪念日：浏览器一次性日期' }).waitFor();
+  if ((await readAnniversaryRecords(page)).some((record) => record.id === yearlyBeforeEdit.id)) throw new Error('Confirmed Anniversary deletion left the selected record in storage');
+  if (JSON.stringify(await readOtherFoundationStores(page)) !== foundationBeforeAnniversary) throw new Error('Anniversary CRUD changed Todo, Couple, Period, Settings, or module data');
+
+  await page.getByRole('button', { name: '查看纪念日：浏览器一次性日期' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  await page.getByRole('button', { name: '删除' }).click();
+  await desktopNav.getByRole('button', { name: '待办' }).click();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  if (await page.getByRole('alertdialog').count()) throw new Error('Switching modules left an Anniversary confirmation over Todo');
+  await desktopNav.getByRole('button', { name: '纪念日' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  if (await page.getByRole('alertdialog').count()) throw new Error('Returning to Anniversary restored a stale delete confirmation');
   if (pageErrors.length) throw new Error(`Browser page errors: ${pageErrors.join('; ')}`);
   await desktop.close();
 
@@ -761,9 +839,37 @@ try {
   await mobilePage.getByRole('heading', { name: '小月历设置' }).waitFor();
   await mobilePage.getByRole('button', { name: '返回日历' }).tap();
   await mobilePage.getByRole('heading', { name: '小月历', exact: true }).waitFor();
+  await mobilePage.setViewportSize({ width: 390, height: 844 });
+  await mobilePage.getByRole('button', { name: '纪念日' }).tap();
+  await mobilePage.getByRole('heading', { name: '还没有纪念日' }).waitFor();
+  for (const width of [320, 360, 390, 430]) {
+    await mobilePage.setViewportSize({ width, height: 844 });
+    const scrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
+    if (scrollWidth > width) throw new Error(`Anniversary home overflows at ${width}px (${scrollWidth}px)`);
+    const pageWidth = await mobilePage.locator('.anniversary-page').evaluate((element) => element.getBoundingClientRect().width);
+    if (pageWidth > width) throw new Error(`Anniversary page exceeds its ${width}px viewport (${pageWidth}px)`);
+  }
+  await mobilePage.setViewportSize({ width: 320, height: 844 });
+  const anniversaryTextScale = await mobilePage.addStyleTag({ content: '.anniversary-module h1,.anniversary-module h2,.anniversary-module button,.anniversary-module p,.anniversary-module span,.anniversary-module strong,.anniversary-module label,.anniversary-module small{font-size:calc(1em * 1.25)!important}' });
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 320) throw new Error('Anniversary overflows at 320px with increased text sizing');
+  anniversaryTextScale.evaluate((element) => element.remove());
+  await mobilePage.setViewportSize({ width: 390, height: 320 });
+  await mobilePage.getByRole('button', { name: '新建纪念日' }).tap();
+  await mobilePage.getByRole('heading', { name: '新建纪念日' }).waitFor();
+  const longAnniversaryTitle = '手机长标题验收'.repeat(8);
+  await mobilePage.getByLabel('名称').fill(longAnniversaryTitle);
+  await mobilePage.getByLabel('日期', { exact: true }).fill('2099-03-01');
+  await mobilePage.getByLabel('备注').fill('合成备注。'.repeat(80));
+  const anniversaryEditorScroll = await mobilePage.locator('.module-holder:visible').evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
+  if (anniversaryEditorScroll.scrollHeight <= anniversaryEditorScroll.clientHeight) throw new Error('Anniversary editor did not scroll in a short keyboard-sized viewport');
+  await mobilePage.getByRole('button', { name: '保存' }).scrollIntoViewIfNeeded();
+  await mobilePage.getByRole('button', { name: '保存' }).tap();
+  await mobilePage.getByRole('button', { name: `查看最近纪念日：${longAnniversaryTitle}` }).waitFor();
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 390) throw new Error('Long Anniversary title or note caused horizontal overflow on mobile');
+  await shot(mobilePage, 'anniversary-mobile-home.png');
   await mobile.close();
 
-  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', periodToggleUndoBackfillEdit: 'passed', periodPinIsolation: 'passed', periodEncryptedExportImportIsolation: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', periodCalendarSwipeAndDateSelection: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', periodNoHorizontalOverflowWithTextScale: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
+  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', periodToggleUndoBackfillEdit: 'passed', periodPinIsolation: 'passed', periodEncryptedExportImportIsolation: 'passed', anniversaryCreateEditDeleteNavigationAndStoreIsolation: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', periodCalendarSwipeAndDateSelection: 'passed', anniversaryWidthsFontScaleLongTextAndEditorScroll: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', periodNoHorizontalOverflowWithTextScale: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
 } finally {
   await browser.close();
 }

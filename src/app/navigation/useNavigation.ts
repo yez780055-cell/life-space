@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as NativeApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { initialSnapshot, openGuide, openSurface, switchModule, type NavigationSnapshot, type Surface, type PeriodScreen, type TodoScreen, type TodoSpace } from './model';
+import { initialSnapshot, openGuide, openSurface, switchModule, type AnniversaryScreen, type NavigationSnapshot, type Surface, type PeriodScreen, type TodoScreen, type TodoSpace } from './model';
 import { saveLastModule, type ModuleId } from '../../shared/storage/settings';
 
 const HISTORY_KEY = '__lifeSpaceFoundation';
@@ -20,7 +20,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const depth = useRef(0);
   const epoch = useRef(0);
   const current = useRef(snapshot);
-  const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen']; periodScreen: NavigationSnapshot['periodScreen'] } | null>(null);
+  const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen']; periodScreen: NavigationSnapshot['periodScreen']; anniversaryScreen: NavigationSnapshot['anniversaryScreen']; anniversaryRecordId: string | null; anniversaryEditorReturn: NavigationSnapshot['anniversaryEditorReturn'] } | null>(null);
   const pendingTraversal = useRef(false);
   const guardBounce = useRef(false);
   const todoSpaceForward = useRef(false);
@@ -44,13 +44,17 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     const todoScreenToRestore = base.todoScreen;
     const todoSpaceToRestore = base.todoSpace;
     const periodScreenToRestore = base.periodScreen;
+    const anniversaryScreenToRestore = base.anniversaryScreen;
+    const anniversaryRecordIdToRestore = base.anniversaryRecordId;
+    const anniversaryEditorReturnToRestore = base.anniversaryEditorReturn;
     todoSpaceForward.current = false;
     const root = switchModule({
       ...base,
       pages: { ...pages, [module]: 'home' },
       surfaces: [],
       ...(module === 'todo' ? { todoSpace: 'personal' as const, todoScreen: 'home' as const } : {}),
-      ...(module === 'period' ? { periodScreen: 'calendar' as const } : {})
+      ...(module === 'period' ? { periodScreen: 'calendar' as const } : {}),
+      ...(module === 'anniversary' ? { anniversaryScreen: 'home' as const, anniversaryRecordId: null, anniversaryEditorReturn: 'home' as const } : {})
     }, module);
     depth.current = 0;
     history.replaceState(entry(root, 0), '');
@@ -77,6 +81,21 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     }
     if (module === 'period' && periodScreenToRestore !== 'calendar') {
       restored = { ...restored, periodScreen: periodScreenToRestore };
+      depth.current += 1;
+      history.pushState(entry(restored, depth.current), '');
+    }
+    if (module === 'anniversary' && anniversaryScreenToRestore === 'detail') {
+      restored = { ...restored, anniversaryScreen: 'detail', anniversaryRecordId: anniversaryRecordIdToRestore, anniversaryEditorReturn: anniversaryEditorReturnToRestore };
+      depth.current += 1;
+      history.pushState(entry(restored, depth.current), '');
+    }
+    if (module === 'anniversary' && anniversaryScreenToRestore === 'editor') {
+      if (anniversaryEditorReturnToRestore === 'detail') {
+        restored = { ...restored, anniversaryScreen: 'detail', anniversaryRecordId: anniversaryRecordIdToRestore, anniversaryEditorReturn: 'detail' };
+        depth.current += 1;
+        history.pushState(entry(restored, depth.current), '');
+      }
+      restored = { ...restored, anniversaryScreen: 'editor', anniversaryRecordId: anniversaryRecordIdToRestore, anniversaryEditorReturn: anniversaryEditorReturnToRestore };
       depth.current += 1;
       history.pushState(entry(restored, depth.current), '');
     }
@@ -118,9 +137,9 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       }
       if (pendingTab.current) {
         todoSpaceForward.current = false;
-        const { module, pages, todoSpace, todoScreen, periodScreen } = pendingTab.current;
+        const { module, pages, todoSpace, todoScreen, periodScreen, anniversaryScreen, anniversaryRecordId, anniversaryEditorReturn } = pendingTab.current;
         pendingTab.current = null;
-        commitTab(module, pages, { ...state.snapshot, todoSpace, todoScreen, periodScreen });
+        commitTab(module, pages, { ...state.snapshot, todoSpace, todoScreen, periodScreen, anniversaryScreen, anniversaryRecordId, anniversaryEditorReturn });
       } else if (state.epoch !== epoch.current) {
         // A tab switch can leave old child entries ahead of the root. Bounce
         // back to the root instead of turning the stale entry into a phantom root.
@@ -193,7 +212,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     todoSpaceForward.current = false;
     // Return to the app's root history entry before replacing the active tab.
     if (depth.current > 0) {
-      pendingTab.current = { module, pages: current.current.pages, todoSpace: current.current.todoSpace, todoScreen: current.current.todoScreen, periodScreen: current.current.periodScreen };
+      pendingTab.current = { module, pages: current.current.pages, todoSpace: current.current.todoSpace, todoScreen: current.current.todoScreen, periodScreen: current.current.periodScreen, anniversaryScreen: current.current.anniversaryScreen, anniversaryRecordId: current.current.anniversaryRecordId, anniversaryEditorReturn: current.current.anniversaryEditorReturn };
       history.go(-depth.current);
     } else {
       commitTab(module, current.current.pages, current.current);
@@ -233,6 +252,26 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     showPeriodScreen: (screen: PeriodScreen) => {
       if (current.current.module !== 'period' || current.current.periodScreen === screen || current.current.surfaces.length > 0 || pendingTraversal.current) return;
       push({ ...current.current, periodScreen: screen, surfaces: [] });
+    },
+    showAnniversaryScreen: (screen: AnniversaryScreen, recordId?: string) => {
+      const existing = current.current;
+      if (existing.module !== 'anniversary' || existing.surfaces.length > 0 || pendingTraversal.current) return;
+      if (screen === 'detail' && existing.anniversaryScreen === 'home') {
+        push({ ...existing, anniversaryScreen: 'detail', anniversaryRecordId: recordId ?? null, anniversaryEditorReturn: 'home', surfaces: [] });
+      } else if (screen === 'editor' && (existing.anniversaryScreen === 'home' || existing.anniversaryScreen === 'detail')) {
+        push({ ...existing, anniversaryScreen: 'editor', anniversaryRecordId: recordId ?? null, anniversaryEditorReturn: existing.anniversaryScreen, surfaces: [] });
+      }
+    },
+    returnAnniversaryHome: () => {
+      if (current.current.module !== 'anniversary' || pendingTraversal.current) return;
+      if (depth.current > 0) {
+        pendingTraversal.current = true;
+        history.go(-depth.current);
+      } else {
+        const home = { ...current.current, anniversaryScreen: 'home' as const, anniversaryRecordId: null, anniversaryEditorReturn: 'home' as const, surfaces: [] };
+        history.replaceState(entry(home, 0), '');
+        setCurrent(home);
+      }
     },
     showTodoScreen: (screen: TodoScreen) => {
       if (current.current.module !== 'todo' || current.current.todoScreen === screen || current.current.surfaces.length > 0 || pendingTraversal.current) return;

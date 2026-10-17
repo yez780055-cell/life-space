@@ -1,7 +1,7 @@
 export const DB_NAME = 'life-space';
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
-export type StoreName = 'settings' | 'modules' | 'todoTasks' | 'todoTags' | 'todoOccurrences' | 'coupleItems' | 'coupleTags' | 'periodRecords' | 'periodSettings';
+export type StoreName = 'settings' | 'modules' | 'todoTasks' | 'todoTags' | 'todoOccurrences' | 'coupleItems' | 'coupleTags' | 'periodRecords' | 'periodSettings' | 'anniversaryRecords';
 
 let connection: Promise<IDBDatabase> | undefined;
 
@@ -37,6 +37,12 @@ export function openDatabase(): Promise<IDBDatabase> {
         periodRecords.createIndex('startDate', 'startDate', { unique: false });
         periodRecords.createIndex('endDate', 'endDate', { unique: false });
         db.createObjectStore('periodSettings', { keyPath: 'key' });
+      }
+      if (event.oldVersion < 6) {
+        const anniversaryRecords = db.createObjectStore('anniversaryRecords', { keyPath: 'id' });
+        anniversaryRecords.createIndex('date', 'date', { unique: false });
+        anniversaryRecords.createIndex('recurrence', 'recurrence', { unique: false });
+        anniversaryRecords.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
     request.onsuccess = () => {

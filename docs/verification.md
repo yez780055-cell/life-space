@@ -1,5 +1,14 @@
 # Life Space 网页验证记录
 
+## Phase 3B 纪念日模块 V1（2026-10-17）
+
+- 基线：`main` / Phase 3A merge commit `34da1b01be95bf53fea330a1120c724e7d9894ee`；功能分支：`feat/anniversary-v1`。
+- 本地检查：`npm run typecheck`、`npm run lint`、`npm test -- --run`（19 个文件、117 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机 Chromium 生产预览通过。桌面覆盖周年/一次性记录、创建与编辑、ID 稳定、删除取消和确认、Tab 切换时删除确认收起，以及 Anniversary CRUD 前后 Todo、Couple、Period、设置和模块 stores 保持一致。
+- 移动覆盖 320、360、390、430px，放大文字、长标题/备注、短视口编辑表单滚动和保存按钮可达；无横向溢出。PWA manifest、Service Worker、scope 和 start URL 均与本机预览一致。
+- 浏览器验证仅使用合成记录，截图写入忽略目录 `.artifacts/browser-preview`。自动化没有访问真人数据。Android 实体设备的系统返回、软键盘遮挡、安全区 inset 和屏幕阅读器仍待人工验收。
+- GitHub Actions：待推送提交触发后补记运行链接与状态。
+
 ## Phase 3A 小月历整合（2026-10-16）
 
 - 基线：`main` / Phase 2C merge commit `6560dd2bb033a63e580d6ee313b9ed425aaf383f`。开发分支：`feat/period-integration`。独立只读源仓库 `xiaoyueli/main` HEAD：`ff72014e9c691d2bbd18a57d8e2966405f507386`。
@@ -70,3 +79,13 @@ PR：[Life Space Phase 2B：个人待办与周期任务 #3](https://github.com/y
 Pages 只有一个站点：推送 `feat/todo-phase-2b` 会替换此开发预览；旧 `feat/todo-phase-2a` 分支推送不再触发部署。预览地址：<https://yez780055-cell.github.io/life-space/>。
 
 该预览用于网页开发验收，不代表合并或正式发布。没有进行 Android APK 构建或真机测试。
+
+## Phase 3B：纪念日 V1
+
+- 基线：`main` / `origin/main`，`34da1b01be95bf53fea330a1120c724e7d9894ee`（Phase 3A 合并）。
+- 功能分支：`feat/anniversary-v1`。
+- `npm run typecheck`、`npm run lint`、`npm test -- --run`（19 个测试文件、117 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机生产预览通过；覆盖现有 Todo、Couple、Period 回归，纪念日创建/编辑/删除/导航/数据隔离，手机 320、360、390、430px，文字放大、短视口编辑器及 PWA manifest/Service Worker 控制状态。截图保存在忽略目录 `.artifacts/browser-preview`。
+- 浏览器验证使用本机 `http://127.0.0.1:4189/` 预览。此次预览 scope 与 manifest 一致；GitHub Pages `/life-space/` 子路径仍需由 PR CI 验证。
+- GitHub Actions：Draft PR 建立后补记实际运行链接与状态。
+- Android 真机系统返回、软键盘遮挡与安全区 inset 尚待人工验收；本阶段不构建 APK。

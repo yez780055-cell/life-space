@@ -52,7 +52,7 @@ describe('isolated Period repository', () => {
   it('upgrades v4 by adding only Period stores and preserves all existing data', async () => {
     await createV4WithData();
     const db = await openDatabase();
-    expect(db.version).toBe(5);
+    expect(db.version).toBe(6);
     expect(['settings', 'modules', 'todoTasks', 'todoTags', 'todoOccurrences', 'coupleItems', 'coupleTags', 'periodRecords', 'periodSettings'].every((name) => db.objectStoreNames.contains(name))).toBe(true);
     db.close();
     resetDatabaseConnectionForTests();
