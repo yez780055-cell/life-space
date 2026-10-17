@@ -71,7 +71,7 @@ beforeEach(async () => {
   vi.stubGlobal('PointerEvent', TestPointerEvent);
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, media: '', onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() })));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('minimal personal Todo', () => {
   it('opens on today, shows no demo tasks, and exposes only date and all views', async () => {
@@ -116,7 +116,7 @@ describe('minimal personal Todo', () => {
     await waitFor(async () => expect(await todoRepository.listTasks()).toHaveLength(1));
     expect((await todoRepository.listTasks())[0]).toMatchObject({ title: '浇花', scheduledDate: selected });
     expect(screen.getByRole('dialog', { name: '快速添加' })).toBeTruthy();
-    expect((screen.getByRole('textbox', { name: '任务内容' }) as HTMLInputElement).value).toBe('');
+    await waitFor(() => expect((screen.getByRole('textbox', { name: '任务内容' }) as HTMLInputElement).value).toBe(''));
 
     fireEvent.change(screen.getByRole('textbox', { name: '任务内容' }), { target: { value: '收衣服' } });
     fireEvent.click(screen.getByRole('button', { name: '添加' }));
@@ -333,14 +333,16 @@ describe('minimal personal Todo', () => {
     await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
     expect(secondCard.getAttribute('aria-expanded')).toBe('false');
 
-    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    vi.useFakeTimers();
     fireEvent.pointerDown(secondCard, { pointerId: 12, pointerType: 'touch', button: 0, clientX: 10, clientY: 10 });
-    const holdCallback = setTimeoutSpy.mock.calls.find(([, delay]) => delay === 300)?.[0];
-    expect(typeof holdCallback).toBe('function');
-    act(() => { if (typeof holdCallback === 'function') holdCallback(); });
+    act(() => vi.advanceTimersByTime(299));
+    expect(secondCard.closest('.couple-item-card')?.classList.contains('is-dragging')).toBe(false);
+    act(() => vi.advanceTimersByTime(1));
     expect(secondCard.closest('.couple-item-card')?.classList.contains('is-dragging')).toBe(true);
     fireEvent.pointerMove(unplannedColumn, { pointerId: 12, pointerType: 'touch', clientX: 12, clientY: 12 });
     fireEvent.pointerUp(unplannedColumn, { pointerId: 12, pointerType: 'touch', clientX: 12, clientY: 12 });
+    act(() => vi.advanceTimersByTime(0));
+    vi.useRealTimers();
     await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBeNull());
     expect(secondCard.getAttribute('aria-expanded')).toBe('false');
 

@@ -31,7 +31,7 @@ describe('local storage', () => {
     expect(await moduleStorage('anniversary').read('same')).toBeUndefined();
   });
 
-  it('upgrades version 1 settings and modules to version 4 without dropping existing data', async () => {
+  it('upgrades version 1 settings and modules to version 5 without dropping existing data', async () => {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, 1);
       request.onupgradeneeded = () => request.result.createObjectStore('settings');
@@ -57,8 +57,8 @@ describe('local storage', () => {
       request.onerror = () => reject(request.error);
     });
     const db = await openDatabase();
-    expect(db.version).toBe(4);
-    expect(['settings', 'modules', 'todoTasks', 'todoTags', 'todoOccurrences', 'coupleItems', 'coupleTags'].every((store) => db.objectStoreNames.contains(store))).toBe(true);
+    expect(db.version).toBe(5);
+    expect(['settings', 'modules', 'todoTasks', 'todoTags', 'todoOccurrences', 'coupleItems', 'coupleTags', 'periodRecords', 'periodSettings'].every((store) => db.objectStoreNames.contains(store))).toBe(true);
     db.close();
     resetDatabaseConnectionForTests();
     expect(await readValue('settings', 'lastModule')).toBe('anniversary');
@@ -90,7 +90,7 @@ describe('local storage', () => {
     });
 
     const db = await openDatabase();
-    expect(db.version).toBe(4);
+    expect(db.version).toBe(5);
     expect(db.objectStoreNames.contains('coupleItems')).toBe(true);
     expect(db.objectStoreNames.contains('coupleTags')).toBe(true);
     const read = (storeName: string, key: string) => new Promise<unknown>((resolve, reject) => {

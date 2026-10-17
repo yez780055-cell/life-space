@@ -1,4 +1,4 @@
-/* global process, console, document, window, indexedDB, navigator, URL, fetch, Touch, TouchEvent, PointerEvent, MouseEvent, getComputedStyle */
+/* global process, console, document, window, indexedDB, navigator, URL, fetch, Touch, TouchEvent, PointerEvent, MouseEvent, Event, getComputedStyle */
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
@@ -18,6 +18,50 @@ async function waitForSpace(page, space) {
 
 async function waitForTodoData(page) {
   await page.waitForFunction(() => document.querySelector('.todo-module-root')?.getAttribute('data-loading') === 'false');
+}
+
+async function readPeriodRecords(page) {
+  return page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('periodRecords', 'readonly').objectStore('periodRecords').getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+}
+
+async function waitForPeriodCount(page, count) {
+  await page.waitForFunction(async (expected) => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('periodRecords', 'readonly').objectStore('periodRecords').count(); request.onsuccess = () => resolve(request.result === expected); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  }, count);
+}
+
+async function readPeriodSettings(page) {
+  return page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try { return await new Promise((resolve, reject) => { const request = database.transaction('periodSettings', 'readonly').objectStore('periodSettings').get('root'); request.onsuccess = () => resolve(request.result?.value); request.onerror = () => reject(request.error); }); }
+    finally { database.close(); }
+  });
+}
+
+async function readNonPeriodStores(page) {
+  return page.evaluate(async () => {
+    const names = ['settings', 'modules', 'todoTasks', 'todoTags', 'todoOccurrences', 'coupleItems', 'coupleTags'];
+    const database = await new Promise((resolve, reject) => { const request = indexedDB.open('life-space'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = database.transaction(names, 'readonly');
+        const values = {};
+        for (const name of names) {
+          const request = tx.objectStore(name).getAll();
+          request.onsuccess = () => { values[name] = request.result; };
+          request.onerror = () => reject(request.error);
+        }
+        tx.oncomplete = () => resolve(values);
+        tx.onerror = () => reject(tx.error);
+      });
+    } finally { database.close(); }
+  });
 }
 
 async function waitForLastModule(page, expectedModule) {
@@ -384,7 +428,121 @@ try {
 
   const desktopNav = page.locator('.sidebar');
   await desktopNav.getByRole('button', { name: '小月历' }).click();
-  await page.getByRole('region', { name: '小月历' }).waitFor();
+  const periodRegion = page.getByRole('region', { name: '小月历', exact: true });
+  await periodRegion.waitFor();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await page.getByRole('button', { name: '记录经期开始' }).click();
+  await waitForPeriodCount(page, 1);
+  await page.getByRole('status').getByRole('button', { name: '撤销' }).click();
+  await waitForPeriodCount(page, 0);
+  await page.getByRole('button', { name: '记录经期开始' }).click();
+  await waitForPeriodCount(page, 1);
+  await page.getByRole('button', { name: '取消这段记录' }).click();
+  await waitForPeriodCount(page, 0);
+  await page.getByRole('status').getByRole('button', { name: '撤销' }).click();
+  await waitForPeriodCount(page, 1);
+  const yesterday = await page.evaluate(() => { const date = new Date(); date.setDate(date.getDate() - 1); return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`; });
+  await page.locator(`.period-day[aria-label^="${yesterday}"]`).click();
+  await page.getByRole('heading', { name: yesterday, exact: true }).waitFor();
+  await page.getByRole('button', { name: '记录经期开始' }).click();
+  const backfillDialog = page.getByRole('dialog', { name: '补录历史经期' });
+  await backfillDialog.waitFor();
+  await backfillDialog.getByRole('button', { name: '补录记录' }).click();
+  await waitForPeriodCount(page, 2);
+  await page.getByRole('button', { name: '周期统计' }).click();
+  await page.getByRole('heading', { name: '周期统计' }).waitFor();
+  if (await page.getByText('还没有实际经期记录').count()) throw new Error('A real Period entry was not included in the statistics view');
+  const firstHistoryRow = page.locator('.period-history-item').first();
+  const recordLabel = await firstHistoryRow.locator('strong').innerText();
+  await firstHistoryRow.getByRole('button', { name: /^编辑/ }).click();
+  const editDialog = page.getByRole('dialog', { name: '编辑经期记录' });
+  await editDialog.waitFor();
+  const yearPicker = editDialog.getByRole('region', { name: '选择开始日期' }).getByLabel('选择年份');
+  const currentYear = await page.evaluate(() => String(new Date().getFullYear()));
+  await yearPicker.selectOption('1900');
+  await yearPicker.selectOption(currentYear);
+  if (await yearPicker.inputValue() !== currentYear) throw new Error('The date picker could not return to the current year after visiting 1900');
+  await editDialog.getByRole('button', { name: '保存记录' }).click();
+  await page.getByText(recordLabel, { exact: true }).waitFor();
+  await page.getByRole('button', { name: '返回日历' }).click();
+  await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
+  await shot(page, 'period-desktop-calendar.png');
+  await page.getByRole('button', { name: '小月历设置' }).click();
+  await page.getByRole('heading', { name: '小月历设置' }).waitFor();
+  await page.getByLabel('参考周期长度').fill('29');
+  await page.getByRole('button', { name: '保存参数' }).click();
+  await page.getByRole('status').filter({ hasText: '周期参数已保存' }).waitFor();
+  await page.getByLabel('仅保存在本机').fill('synthetic browser memo');
+  await page.getByRole('button', { name: '保存备忘' }).click();
+  await page.getByRole('status').filter({ hasText: '关怀备忘已保存' }).waitFor();
+  await page.getByRole('button', { name: '设置 PIN' }).click();
+  const pinDialog = page.getByRole('dialog', { name: '小月历隐私锁' });
+  await pinDialog.getByLabel('新 PIN（4–12 位数字）').fill('2468');
+  await pinDialog.getByLabel('再次输入 PIN').fill('2468');
+  await pinDialog.getByRole('button', { name: '设置 PIN' }).click();
+  await page.getByText('小月历 PIN 已开启').waitFor();
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); });
+  await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
+  await page.getByRole('button', { name: '输入 PIN' }).click();
+  await page.getByRole('dialog', { name: '小月历隐私锁' }).getByLabel('PIN').fill('2468');
+  await page.getByRole('dialog', { name: '小月历隐私锁' }).getByRole('button', { name: '解锁' }).click();
+  await page.getByRole('heading', { name: '小月历设置' }).waitFor();
+  await desktopNav.getByRole('button', { name: '纪念日' }).click();
+  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await desktopNav.getByRole('button', { name: '待办' }).click();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await desktopNav.getByRole('button', { name: '小月历' }).click();
+  await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
+  await page.getByRole('button', { name: '输入 PIN' }).click();
+  const unlockDialog = page.getByRole('dialog', { name: '小月历隐私锁' });
+  await unlockDialog.getByLabel('PIN').fill('2468');
+  await unlockDialog.getByRole('button', { name: '解锁' }).click();
+  await page.getByRole('heading', { name: '小月历设置' }).waitFor();
+  await page.getByRole('button', { name: '导出备份' }).click();
+  const exportDialog = page.getByRole('dialog', { name: '导出加密备份' });
+  await exportDialog.getByLabel('备份密码').fill('synthetic-browser-pass');
+  await exportDialog.getByLabel('确认密码').fill('synthetic-browser-pass');
+  const [backupDownload] = await Promise.all([page.waitForEvent('download'), exportDialog.getByRole('button', { name: '导出加密 .xyl' }).click()]);
+  const backupPath = await backupDownload.path();
+  if (!backupPath) throw new Error('The encrypted Period backup was not available for re-import verification');
+  await page.getByRole('button', { name: '选择文件' }).waitFor();
+  const storesBeforeImport = JSON.stringify(await readNonPeriodStores(page));
+  await page.getByRole('button', { name: '选择文件' }).click();
+  const importDialog = page.getByRole('dialog', { name: '从旧小月历导入' });
+  await importDialog.getByLabel('备份文件').setInputFiles(backupPath);
+  const periodsBeforeWrongPassword = JSON.stringify(await readPeriodRecords(page));
+  await importDialog.getByLabel('备份密码').fill('wrong-synthetic-pass');
+  await importDialog.getByRole('button', { name: '解密并预览' }).click();
+  await importDialog.getByRole('alert').filter({ hasText: '密码不正确' }).waitFor();
+  if (JSON.stringify(await readPeriodRecords(page)) !== periodsBeforeWrongPassword) throw new Error('A wrong backup password changed Period records');
+  await waitForPeriodCount(page, 2);
+  await importDialog.getByLabel('备份密码').fill('synthetic-browser-pass');
+  await importDialog.getByRole('button', { name: '解密并预览' }).click();
+  await importDialog.getByText('2 段真实记录').waitFor();
+  const confirmImport = importDialog.getByLabel('我了解并确认替换小月历数据');
+  await confirmImport.check();
+  await importDialog.getByRole('button', { name: '确认替换小月历数据' }).click();
+  await waitForPeriodCount(page, 2);
+  if (JSON.stringify(await readNonPeriodStores(page)) !== storesBeforeImport) throw new Error('Period backup import altered Todo, Couple, settings, or module data');
+  await page.reload();
+  await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
+  await page.getByRole('button', { name: '输入 PIN' }).click();
+  await page.getByRole('dialog', { name: '小月历隐私锁' }).getByLabel('PIN').fill('2468');
+  await page.getByRole('dialog', { name: '小月历隐私锁' }).getByRole('button', { name: '解锁' }).click();
+  await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
+  await waitForPeriodCount(page, 2);
+  const restoredPeriodSettings = await readPeriodSettings(page);
+  if (restoredPeriodSettings.referenceCycleLength !== 29 || restoredPeriodSettings.careMemo !== 'synthetic browser memo') throw new Error('Period settings did not persist through encrypted backup restore and page reload');
+  await desktopNav.getByRole('button', { name: '纪念日' }).click();
+  await page.getByRole('region', { name: '纪念日' }).waitFor();
+  await desktopNav.getByRole('button', { name: '待办' }).click();
+  await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+  await desktopNav.getByRole('button', { name: '小月历' }).click();
+  await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
+  await page.getByRole('button', { name: '输入 PIN' }).click();
+  await page.getByRole('dialog', { name: '小月历隐私锁' }).getByLabel('PIN').fill('2468');
+  await page.getByRole('dialog', { name: '小月历隐私锁' }).getByRole('button', { name: '解锁' }).click();
+  await page.getByRole('heading', { name: '小月历', exact: true }).waitFor();
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
   await page.getByRole('region', { name: '纪念日' }).waitFor();
   await desktopNav.getByRole('button', { name: '设置' }).click();
@@ -425,6 +583,21 @@ try {
     return { supported: true, scope: ready.scope, controlled: Boolean(navigator.serviceWorker.controller), manifestScope, startUrl };
   });
   if (!pwa.supported || !pwa.controlled || pwa.scope !== url || pwa.manifestScope !== url || pwa.startUrl !== url) throw new Error(`PWA registration did not match the preview URL: ${JSON.stringify(pwa)}`);
+  await page.context().setOffline(true);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: '今天', exact: true }).waitFor();
+    await desktopNav.getByRole('button', { name: '小月历' }).click();
+    await page.getByRole('heading', { name: '小月历已锁定' }).waitFor();
+  } finally { await page.context().setOffline(false); }
+  const storesBeforeForgottenPinClear = JSON.stringify(await readNonPeriodStores(page));
+  await page.getByRole('button', { name: '忘记 PIN？清除小月历数据' }).click();
+  const clearPeriodDialog = page.getByRole('dialog', { name: '清除小月历数据？' });
+  await clearPeriodDialog.getByLabel('我确认清除小月历数据').check();
+  await clearPeriodDialog.getByRole('button', { name: '清除小月历' }).click();
+  await waitForPeriodCount(page, 0);
+  if ((await readPeriodSettings(page)).appLock.enabled) throw new Error('Clearing Period data from the lock screen did not reset its PIN');
+  if (JSON.stringify(await readNonPeriodStores(page)) !== storesBeforeForgottenPinClear) throw new Error('Clearing Period data altered Todo, Couple, settings, or module data');
   if (pageErrors.length) throw new Error(`Browser page errors: ${pageErrors.join('; ')}`);
   await desktop.close();
 
@@ -484,7 +657,7 @@ try {
   await quickCoupleDialog.getByRole('button', { name: '详细' }).tap();
   const smallDetailDialog = mobilePage.getByRole('dialog', { name: '详细添加小事' });
   await smallDetailDialog.getByRole('textbox', { name: '事项标题' }).fill('临时长表单');
-  await mobilePage.setViewportSize({ width: 390, height: 520 });
+  await mobilePage.setViewportSize({ width: 390, height: 320 });
   const sheetMetrics = await smallDetailDialog.evaluate((element) => ({ overflowY: getComputedStyle(element).overflowY, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, paddingBottom: Number.parseFloat(getComputedStyle(element).paddingBottom) }));
   if (sheetMetrics.overflowY !== 'auto' || sheetMetrics.scrollHeight <= sheetMetrics.clientHeight) throw new Error(`Couple detail sheet did not scroll in a short keyboard-sized viewport: ${JSON.stringify(sheetMetrics)}`);
   if (sheetMetrics.paddingBottom < 16) throw new Error('Couple detail sheet has no bottom safe-area padding');
@@ -534,9 +707,63 @@ try {
   await mobilePage.getByRole('button', { name: '进入情侣专区' }).tap();
   await waitForSpace(mobilePage, 'couple');
   await coupleCard(mobilePage, '手机上的情侣事项').waitFor();
+  await mobilePage.getByRole('button', { name: '小月历' }).tap();
+  await mobilePage.getByRole('heading', { name: '小月历', exact: true }).waitFor();
+  for (const width of [320, 360, 390, 430]) {
+    await mobilePage.setViewportSize({ width, height: 844 });
+    const scrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
+    if (scrollWidth > width) throw new Error(`Period calendar has horizontal overflow at ${width}px (${scrollWidth}px)`);
+    const calendarWidth = await mobilePage.locator('.period-calendar-card').evaluate((element) => element.getBoundingClientRect().width);
+    if (calendarWidth < width - 48) throw new Error(`Period calendar is too narrow at ${width}px (${calendarWidth}px)`);
+  }
+  await mobilePage.setViewportSize({ width: 320, height: 844 });
+  const periodTextScale = await mobilePage.addStyleTag({ content: '.period-module h1,.period-module h2,.period-module button,.period-module p,.period-module span,.period-module label,.period-module small,.period-module strong{font-size:calc(1rem * 1.2)!important}' });
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 320) throw new Error('Period calendar overflows at 320px with increased text sizing');
+  const periodCalendar = mobilePage.locator('.period-calendar-card');
+  const yesterdayOnMobile = await mobilePage.evaluate(() => { const date = new Date(); date.setDate(date.getDate() - 1); return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`; });
+  const mobileDateButton = mobilePage.locator(`.period-day[aria-label^="${yesterdayOnMobile}"]`);
+  await mobileDateButton.tap();
+  await mobilePage.waitForFunction((expected) => document.querySelector('.period-day[aria-pressed="true"]')?.getAttribute('aria-label')?.startsWith(expected) && document.querySelector('.period-day-detail h2')?.textContent === expected, yesterdayOnMobile, { timeout: 3000 }).catch(async () => {
+    const selected = await mobilePage.locator('.period-day[aria-pressed="true"]').getAttribute('aria-label');
+    const detail = await mobilePage.locator('.period-day-detail h2').innerText();
+    throw new Error(`Mobile date tap did not select ${yesterdayOnMobile}; selected=${selected}; detail=${detail}`);
+  });
+  await shot(mobilePage, 'period-mobile-calendar.png');
+  const monthBeforeSwipe = await periodCalendar.locator('.period-calendar-heading h2').innerText();
+  const calendarDays = mobilePage.locator('.period-days');
+  await calendarDays.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 61, pointerType: 'touch', isPrimary: true, button: 0, clientX: box.x + box.width * 0.75, clientY: box.y + box.height / 2 }));
+    element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 61, pointerType: 'touch', isPrimary: true, button: 0, clientX: box.x + box.width * 0.25, clientY: box.y + box.height / 2 }));
+  });
+  await mobilePage.waitForFunction((before) => document.querySelector('.period-calendar-heading h2')?.textContent !== before, monthBeforeSwipe);
+  const monthAfterSwipe = await periodCalendar.locator('.period-calendar-heading h2').innerText();
+  const detailAfterHorizontalSwipe = await mobilePage.locator('.period-day-detail h2').innerText();
+  await calendarDays.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 62, pointerType: 'touch', isPrimary: true, button: 0, clientX: box.x + box.width / 2, clientY: box.y + box.height * 0.25 }));
+    element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 62, pointerType: 'touch', isPrimary: true, button: 0, clientX: box.x + box.width / 2, clientY: box.y + box.height * 0.75 }));
+  });
+  if (await periodCalendar.locator('.period-calendar-heading h2').innerText() !== monthAfterSwipe) throw new Error('A vertical calendar gesture changed the month instead of remaining a scroll gesture');
+  if (await mobilePage.locator('.period-day-detail h2').innerText() !== detailAfterHorizontalSwipe) throw new Error('A vertical calendar gesture changed the selected date detail');
+  await periodTextScale.evaluate((element) => element.remove());
+  await mobilePage.setViewportSize({ width: 390, height: 320 });
+  await mobilePage.getByRole('button', { name: '小月历设置' }).tap();
+  await mobilePage.getByRole('heading', { name: '小月历设置' }).waitFor();
+  await mobilePage.getByRole('button', { name: '选择文件' }).tap();
+  const mobileImportDialog = mobilePage.getByRole('dialog', { name: '从旧小月历导入' });
+  const mobileDialogMetrics = await mobileImportDialog.evaluate((element) => ({ overflowY: getComputedStyle(element).overflowY, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, paddingBottom: Number.parseFloat(getComputedStyle(element).paddingBottom) }));
+  if (mobileDialogMetrics.overflowY !== 'auto' || mobileDialogMetrics.scrollHeight <= mobileDialogMetrics.clientHeight) throw new Error(`Period import dialog does not scroll in a short keyboard-sized viewport: ${JSON.stringify(mobileDialogMetrics)}`);
+  if (mobileDialogMetrics.paddingBottom < 16) throw new Error('Period dialog has no bottom safe-area padding');
+  await mobileImportDialog.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await mobileImportDialog.getByRole('button', { name: '关闭' }).scrollIntoViewIfNeeded();
+  await mobileImportDialog.getByRole('button', { name: '关闭' }).tap();
+  await mobilePage.getByRole('heading', { name: '小月历设置' }).waitFor();
+  await mobilePage.getByRole('button', { name: '返回日历' }).tap();
+  await mobilePage.getByRole('heading', { name: '小月历', exact: true }).waitFor();
   await mobile.close();
 
-  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
+  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', periodToggleUndoBackfillEdit: 'passed', periodPinIsolation: 'passed', periodEncryptedExportImportIsolation: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', periodCalendarSwipeAndDateSelection: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', periodNoHorizontalOverflowWithTextScale: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
 } finally {
   await browser.close();
 }

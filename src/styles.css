@@ -629,3 +629,139 @@
   .todo-module-page{transition:none!important}
   .couple-item-card,.couple-card-body,.couple-card-actions{transition:none!important}
 }
+
+.period-module{--period-ink:#514743;--period-muted:#8c7e7a;--period-pink:#d9879b;--period-pink-soft:#f7e8ec;--period-lilac:#9d8bc4;--period-lilac-soft:#eee9f8;min-height:100%;background:#fffdfa;color:var(--period-ink)}
+.period-page{width:min(100%,900px);min-height:100%;margin:0 auto;padding:34px clamp(20px,5vw,68px) calc(42px + var(--safe-bottom));}
+.period-topbar,.period-subheader{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.period-topbar>div:first-child,.period-subheader>div{min-width:0;flex:1}
+.period-topbar h1,.period-subheader h1{margin:2px 0;font-size:30px;font-weight:560;letter-spacing:-.05em;color:#514743}
+.period-kicker{margin:0 0 4px;color:#a48e8d;font-size:9px;font-weight:700;letter-spacing:.17em}
+.period-top-actions{display:flex;gap:7px}
+.period-top-actions button,.period-subheader>button:first-child{width:42px;height:42px;display:grid;place-items:center;border:0;border-radius:13px;background:#f7f1ef;color:#917b78}
+.period-top-actions svg{width:19px;height:19px}
+.period-summary{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:27px;margin:0 0 11px;color:#967f7c;font-size:12px}
+.period-summary small{font-size:10px;color:#9a8aac}
+.period-calendar-card{padding:18px clamp(10px,2.6vw,26px) 12px;border:1px solid #f0e9e6;border-radius:22px;background:#fff;box-shadow:0 8px 30px #5a3b3408}
+.period-calendar-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.period-calendar-heading h2{margin:0;color:#594d49;font-size:16px;font-weight:600}
+.period-calendar-heading button,.period-date-picker-head button{width:34px;height:34px;border:0;border-radius:11px;background:#faf5f3;color:#967e7a;font-size:24px;line-height:1}
+.period-weekdays,.period-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+.period-weekdays{height:31px;align-items:center;color:#a99b97;font-size:10px}
+.period-days{touch-action:pan-y;user-select:none;row-gap:3px}
+.period-day{position:relative;justify-self:center;width:min(100%,42px);aspect-ratio:1;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:#625955;font:inherit;font-size:12px}
+.period-day.outside{color:#c7c0bd}
+.period-day.kind-actual{background:var(--period-pink-soft);color:#9a4f65}
+.period-day.kind-predicted{background:var(--period-lilac-soft);color:#65568e}
+.period-day.kind-uncertain{background:#f8f5fb;color:#8d7eaa}
+.period-day.selected{outline:2px solid #b9818d;outline-offset:1px;font-weight:700}
+.period-day.today:not(.kind-actual):not(.kind-predicted){color:#784e59;font-weight:700}
+.period-day i{position:absolute;bottom:4px;width:3px;height:3px;border-radius:50%;background:#a76d7d}
+.period-legend{display:flex;justify-content:center;gap:18px;padding-top:12px;color:#958783;font-size:10px}
+.period-legend span{display:flex;align-items:center;gap:6px}
+.period-legend i{width:8px;height:8px;border-radius:50%}
+.period-legend i.actual{background:#e9b6c2}.period-legend i.predicted{background:#c8bce6}.period-legend i.uncertain{background:#eee8f5}
+.period-day-detail{margin-top:14px;padding:18px clamp(16px,3vw,26px);border:1px solid #f0e9e6;border-radius:18px;background:#fff}
+.period-day-detail header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.period-day-detail h2{margin:2px 0;color:#514743;font-size:20px;font-weight:580}
+.period-day-detail>p{margin:10px 0 14px;color:#897b77;font-size:12px;line-height:1.6}
+.period-status{padding:5px 9px;border-radius:99px;background:#f8e9ed;color:#a46173;font-size:10px;white-space:nowrap}
+.period-status.predicted-label{background:#f0ebf8;color:#76669c}
+.period-detail-actions{display:flex;gap:8px;align-items:center}
+.period-primary,.period-secondary,.period-danger{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 15px;border:0;border-radius:12px;font:inherit;font-size:12px;font-weight:600}
+.period-primary{background:#bd8290;color:white}
+.period-primary:disabled,.period-danger:disabled{opacity:.45}
+.period-secondary{background:#f5efed;color:#806d69}
+.period-secondary svg{width:15px;height:15px}
+.period-danger{background:#f6e7e7;color:#a2545d}
+.period-header-action{border:0;border-radius:11px;padding:9px 12px;background:#f8ebed;color:#945e6c;font-size:11px}
+.period-forecast-card{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:19px;border-radius:18px;background:#f8f4fb;border:1px solid #eee8f5}
+.period-forecast-card>div{display:grid;gap:7px}
+.period-forecast-card strong{font-size:20px;color:#635779}
+.period-forecast-card small{max-width:540px;color:#857b8e;font-size:11px;line-height:1.6}
+.period-forecast-mark{width:45px;height:45px;display:grid;place-items:center;border-radius:15px;background:#eee8f7;color:#8371aa}
+.period-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:12px 0}
+.period-stats-grid article{display:grid;gap:5px;padding:15px;border:1px solid #f1eae7;border-radius:15px;background:#fff}
+.period-stats-grid span,.period-stats-grid small{font-size:10px;color:#9a8d88}
+.period-stats-grid strong{font-size:21px;font-weight:600;color:#655a55}
+.period-trends{display:grid;gap:11px;margin:14px 0 25px}
+.period-trend-card{padding:15px 16px;border:1px solid #f1eae7;border-radius:15px;background:#fff}
+.period-trend-card header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.period-trend-card h3{margin:0;color:#655a55;font-size:12px;font-weight:600}
+.period-trend-card header span,.period-trend-empty{color:#9a8d88;font-size:10px}
+.period-trend-empty{margin:22px 0 10px;line-height:1.7}
+.period-trend-chart{display:block;width:100%;height:auto;margin-top:8px;overflow:visible}
+.period-trend-gridline{stroke:#f1ecea;stroke-width:1}
+.period-trend-line{fill:none;stroke:#b6a5d2;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.period-trend-point{fill:#a18bc4;stroke:#fff;stroke-width:2}
+.period-trend-bar{fill:#e2b0bd}
+.period-trend-value{fill:#766b67;font-size:10px;font-weight:600}
+.period-trend-label{fill:#a09591;font-size:9px}
+.period-sample-note,.period-setting-note{font-size:10px;line-height:1.6;color:#95878c}
+.period-history-heading{display:flex;justify-content:space-between;align-items:center;margin:24px 0 8px}
+.period-history-heading h2{margin:0;font-size:15px;color:#5a504c}
+.period-history-heading select{padding:7px 10px;border:1px solid #eee7e4;border-radius:9px;background:#fff;color:#7c706c;font:inherit;font-size:11px}
+.period-history-list{display:grid}
+.period-history-item{display:flex;align-items:center;gap:9px;min-height:67px;padding:10px 1px;border-bottom:1px solid #f1ece9}
+.period-history-item>div{min-width:0;flex:1;display:grid;gap:5px}
+.period-history-item strong{font-size:11px;font-weight:600;color:#655a56}
+.period-history-item small{font-size:10px;color:#9d908c}
+.period-history-item button{border:0;background:transparent;color:#967c78;font-size:10px}
+.period-history-dot{width:8px;height:8px;flex:none;border-radius:50%;background:#dfaab6}
+.period-empty{display:grid;justify-items:center;gap:8px;padding:40px 12px;color:#968986}
+.period-empty p{margin:0;font-size:13px}.period-empty small{font-size:10px}
+.period-empty svg{width:24px;height:24px;color:#c4939e}
+.period-setting-group{margin-top:22px}
+.period-setting-group h2{margin:0 0 8px;color:#766863;font-size:13px;font-weight:650}
+.period-setting-card{display:grid;gap:13px;padding:16px;border:1px solid #f0e9e6;border-radius:16px;background:#fff}
+.period-setting-card>label:not(.period-check-row){display:flex;justify-content:space-between;align-items:center;color:#756965;font-size:11px}
+.period-setting-card input[type=number],.period-reminder-config input{width:74px;min-height:36px;border:1px solid #ece4e1;border-radius:9px;padding:7px;background:#fff;color:#594e49;text-align:right;font:inherit}
+.period-setting-card textarea{width:100%;min-height:90px;resize:vertical;padding:11px;border:1px solid #eee7e4;border-radius:11px;font:inherit;font-size:12px;color:#514743}
+.period-memo-label{color:#93847f;font-size:10px}
+.period-check-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;color:#635854}
+.period-check-row span{display:grid;gap:4px}
+.period-check-row strong,.period-setting-action strong{font-size:11px;font-weight:600}
+.period-check-row small,.period-setting-action small{color:#998c88;font-size:10px}
+.period-check-row input{accent-color:#bd8290;width:18px;height:18px}
+.period-reminder-config{display:flex;gap:10px;padding-left:1px}
+.period-reminder-config label{display:flex;align-items:center;gap:5px;color:#8d807b;font-size:10px}
+.period-reminder-config input{width:67px;min-height:31px}
+.period-setting-action{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}
+.period-setting-action>span{display:grid;gap:5px}
+.period-setting-action.danger{padding-top:13px;border-top:1px solid #f1e9e7}
+.period-setting-note{margin:0}
+.period-dialog-backdrop{position:fixed;z-index:70;inset:0;display:grid;place-items:center;padding:16px;padding-bottom:calc(16px + var(--safe-bottom));background:#40363848;backdrop-filter:blur(3px)}
+.period-dialog{position:relative;width:min(100%,520px);max-height:min(88dvh,780px);overflow:auto;padding:26px clamp(18px,4vw,30px);border:1px solid #fff;border-radius:20px;background:#fffdfa;box-shadow:0 22px 80px #48332d30}
+.period-dialog h2{margin:3px 36px 10px 0;color:#514743;font-size:22px;font-weight:580}
+.period-dialog-close{position:absolute;right:13px;top:13px;width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:11px;background:#f8f2f0;color:#8e7c77}
+.period-dialog-close svg{width:17px;height:17px}
+.period-dialog-note{margin:0 0 14px;color:#8d807b;font-size:11px;line-height:1.7}
+.period-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.period-date-label,.period-password-field{display:grid;gap:7px;margin:13px 0;color:#766965;font-size:11px}
+.period-password-field input{width:100%;min-height:42px;padding:10px 11px;border:1px solid #e9e0dd;border-radius:10px;background:white;color:#514743;font:inherit}
+.period-date-picker{padding:10px;border:1px solid #f0e9e6;border-radius:13px;background:#fff}
+.period-date-picker-head{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:7px}
+.period-date-picker-head button{width:29px;height:29px;font-size:20px}
+.period-date-picker-head select{min-width:70px;padding:6px;border:1px solid #eee7e4;border-radius:8px;background:#fff;color:#71645f;font:inherit;font-size:10px}
+.period-date-picker-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
+.period-date-picker-grid span{padding:5px 0;color:#a29490;font-size:9px}
+.period-date-picker-grid button{aspect-ratio:1;border:0;border-radius:50%;background:transparent;color:#655a56;font:inherit;font-size:10px}
+.period-date-picker-grid button.outside{color:#c5bcba}
+.period-date-picker-grid button.selected{background:#f3e3e7;color:#9a5264;font-weight:700}
+.period-date-picker-grid button:disabled{color:#d9d2d0}
+.period-confirm-row{display:flex;align-items:center;gap:8px;margin:14px 0;color:#7f716d;font-size:11px;line-height:1.5}
+.period-confirm-row input{accent-color:#b87988}
+.period-form-error{color:#a44e58;font-size:11px;line-height:1.6}
+.period-import-summary{display:grid;gap:8px;padding:14px;border:1px solid #efe8e5;border-radius:12px;background:#fff}
+.period-import-summary strong{color:#655853;font-size:13px}.period-import-summary span{color:#806f69;font-size:11px}
+.period-import-summary small{color:#978985;font-size:10px;line-height:1.6}
+.period-toast{position:fixed;z-index:80;left:50%;bottom:calc(84px + var(--safe-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:15px;max-width:calc(100% - 28px);padding:11px 15px;border-radius:12px;background:#574d4b;color:#fff;font-size:11px;box-shadow:0 8px 28px #3d302d30}
+.period-toast button{border:0;background:transparent;color:#f5cbd4;font:inherit;font-weight:700}
+.period-lock-gate{height:100%;min-height:360px;display:grid;place-items:center;padding:20px;background:#fffdfa}
+.period-lock-card{width:min(100%,360px);display:grid;justify-items:center;padding:28px;text-align:center;border:1px solid #f0e8e5;border-radius:22px;background:#fff;box-shadow:0 12px 36px #523b340d}
+.period-lock-mark{width:51px;height:51px;display:grid;place-items:center;margin-bottom:17px;border-radius:16px;background:#f8e9ed;color:#ae6c7d}
+.period-lock-card h1{margin:7px 0;font-size:23px;letter-spacing:-.04em;font-weight:600}
+.period-lock-card p:not(.period-kicker){color:#91837e;font-size:11px;line-height:1.7}
+.period-lock-reset{border:0;background:transparent;color:#9b777e;font-size:10px;margin-top:13px;text-decoration:underline;text-underline-offset:3px}
+.period-loading{padding:40px;text-align:center;color:#968986;font-size:12px}
+@media(max-width:700px){.period-page{padding:21px 16px calc(24px + var(--safe-bottom))}.period-topbar h1,.period-subheader h1{font-size:26px}.period-calendar-card{padding:13px 8px 10px;border-radius:18px}.period-day{width:min(100%,38px);font-size:11px}.period-legend{gap:13px;font-size:9px}.period-day-detail{padding:14px}.period-day-detail h2{font-size:18px}.period-status{font-size:9px;padding:5px 7px}.period-detail-actions>*{flex:1}.period-stats-grid{gap:8px}.period-stats-grid article{padding:12px}.period-dialog{max-height:calc(100dvh - 24px - var(--safe-top) - var(--safe-bottom));padding:22px 17px calc(20px + var(--safe-bottom))}.period-dialog-backdrop{place-items:end center;padding:10px 10px calc(10px + var(--safe-bottom))}.period-history-item{gap:6px}.period-history-item button{padding:7px 4px}.period-subheader{margin-bottom:20px}}
+@media(prefers-reduced-motion:reduce){.period-module *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}

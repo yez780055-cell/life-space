@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as NativeApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { initialSnapshot, openGuide, openSurface, switchModule, type NavigationSnapshot, type Surface, type TodoScreen, type TodoSpace } from './model';
+import { initialSnapshot, openGuide, openSurface, switchModule, type NavigationSnapshot, type Surface, type PeriodScreen, type TodoScreen, type TodoSpace } from './model';
 import { saveLastModule, type ModuleId } from '../../shared/storage/settings';
 
 const HISTORY_KEY = '__lifeSpaceFoundation';
@@ -20,7 +20,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const depth = useRef(0);
   const epoch = useRef(0);
   const current = useRef(snapshot);
-  const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen'] } | null>(null);
+  const pendingTab = useRef<{ module: ModuleId; pages: NavigationSnapshot['pages']; todoSpace: NavigationSnapshot['todoSpace']; todoScreen: NavigationSnapshot['todoScreen']; periodScreen: NavigationSnapshot['periodScreen'] } | null>(null);
   const pendingTraversal = useRef(false);
   const guardBounce = useRef(false);
   const todoSpaceForward = useRef(false);
@@ -43,12 +43,14 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     epoch.current += 1;
     const todoScreenToRestore = base.todoScreen;
     const todoSpaceToRestore = base.todoSpace;
+    const periodScreenToRestore = base.periodScreen;
     todoSpaceForward.current = false;
     const root = switchModule({
       ...base,
       pages: { ...pages, [module]: 'home' },
       surfaces: [],
-      ...(module === 'todo' ? { todoSpace: 'personal' as const, todoScreen: 'home' as const } : {})
+      ...(module === 'todo' ? { todoSpace: 'personal' as const, todoScreen: 'home' as const } : {}),
+      ...(module === 'period' ? { periodScreen: 'calendar' as const } : {})
     }, module);
     depth.current = 0;
     history.replaceState(entry(root, 0), '');
@@ -70,6 +72,11 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     }
     if (module === 'todo' && todoScreenToRestore !== 'home') {
       restored = { ...restored, todoScreen: todoScreenToRestore };
+      depth.current += 1;
+      history.pushState(entry(restored, depth.current), '');
+    }
+    if (module === 'period' && periodScreenToRestore !== 'calendar') {
+      restored = { ...restored, periodScreen: periodScreenToRestore };
       depth.current += 1;
       history.pushState(entry(restored, depth.current), '');
     }
@@ -111,9 +118,9 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       }
       if (pendingTab.current) {
         todoSpaceForward.current = false;
-        const { module, pages, todoSpace, todoScreen } = pendingTab.current;
+        const { module, pages, todoSpace, todoScreen, periodScreen } = pendingTab.current;
         pendingTab.current = null;
-        commitTab(module, pages, { ...state.snapshot, todoSpace, todoScreen });
+        commitTab(module, pages, { ...state.snapshot, todoSpace, todoScreen, periodScreen });
       } else if (state.epoch !== epoch.current) {
         // A tab switch can leave old child entries ahead of the root. Bounce
         // back to the root instead of turning the stale entry into a phantom root.
@@ -186,7 +193,7 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     todoSpaceForward.current = false;
     // Return to the app's root history entry before replacing the active tab.
     if (depth.current > 0) {
-      pendingTab.current = { module, pages: current.current.pages, todoSpace: current.current.todoSpace, todoScreen: current.current.todoScreen };
+      pendingTab.current = { module, pages: current.current.pages, todoSpace: current.current.todoSpace, todoScreen: current.current.todoScreen, periodScreen: current.current.periodScreen };
       history.go(-depth.current);
     } else {
       commitTab(module, current.current.pages, current.current);
@@ -222,6 +229,10 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
         return;
       }
       push({ ...current.current, todoSpace: 'couple', todoScreen: 'home', surfaces: [] });
+    },
+    showPeriodScreen: (screen: PeriodScreen) => {
+      if (current.current.module !== 'period' || current.current.periodScreen === screen || current.current.surfaces.length > 0 || pendingTraversal.current) return;
+      push({ ...current.current, periodScreen: screen, surfaces: [] });
     },
     showTodoScreen: (screen: TodoScreen) => {
       if (current.current.module !== 'todo' || current.current.todoScreen === screen || current.current.surfaces.length > 0 || pendingTraversal.current) return;
