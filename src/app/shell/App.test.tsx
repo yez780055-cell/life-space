@@ -5,6 +5,7 @@ import { DB_NAME, resetDatabaseConnectionForTests } from '../../shared/storage/d
 import { saveLastModule } from '../../shared/storage/settings';
 import { todoRepository } from '../../modules/todo/data/repository';
 import { todayKey } from '../../modules/todo/data/dates';
+import { createAnniversary } from '../../modules/anniversary/data/repository';
 
 beforeEach(async () => {
   resetDatabaseConnectionForTests();
@@ -19,6 +20,23 @@ describe('application navigation', () => {
     render(<App/>);
     await waitFor(() => expect(screen.getByRole('main').querySelector('[aria-label="纪念日"]')?.parentElement?.hidden).toBe(false));
     expect(screen.getAllByRole('button', { name: '纪念日' }).length).toBeGreaterThan(0);
+  });
+
+  it('clears an Anniversary confirmation when switching modules and restores the module without a dialog', async () => {
+    await createAnniversary({ title: '导航状态', date: '2030-01-01', recurrence: 'yearly' });
+    render(<App/>);
+    await screen.findByRole('region', { name: '待办' });
+    const navigation = screen.getAllByRole('navigation', { name: '主要导航' }).at(-1)!;
+    fireEvent.click(within(navigation).getByRole('button', { name: '纪念日' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看纪念日：导航状态' }));
+    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(within(navigation).getByRole('button', { name: '小月历' }));
+    await screen.findByRole('region', { name: '小月历' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    fireEvent.click(within(navigation).getByRole('button', { name: '纪念日' }));
+    expect(await screen.findByRole('heading', { name: '纪念日详情' })).toBeTruthy();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('returns through the Todo editor and settings surfaces', async () => {

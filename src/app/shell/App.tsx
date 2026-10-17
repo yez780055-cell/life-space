@@ -10,6 +10,7 @@ import { SettingsPage } from '../settings/SettingsPage';
 import { isAndroidApp } from '../../shared/platform/platform';
 import { TodoModule } from '../../modules/todo/TodoModule';
 import { PeriodModule } from '../../modules/period/PeriodModule';
+import { AnniversaryModule } from '../../modules/anniversary/AnniversaryModule';
 
 const content = { todo: todoContent, period: periodContent, anniversary: anniversaryContent };
 
@@ -45,19 +46,20 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ReadyApp({ startModule, onError }: { startModule: ModuleId; onError: (message: string) => void }) {
-  const { snapshot, historyReady, exitHint, selectModule, showGuide, showSurface, showTodoSpace, showTodoScreen, showPeriodScreen, back } = useNavigation(startModule, onError);
+  const { snapshot, historyReady, exitHint, selectModule, showGuide, showSurface, showTodoSpace, showTodoScreen, showPeriodScreen, showAnniversaryScreen, returnAnniversaryHome, back } = useNavigation(startModule, onError);
   const isSettings = snapshot.surfaces.includes('settings');
   const isAbout = snapshot.surfaces.at(-1) === 'about';
+  const isAnniversaryDeleteOpen = snapshot.module === 'anniversary' && snapshot.surfaces.at(-1) === 'anniversary-delete';
   const isTodoEditor = snapshot.module === 'todo' && snapshot.todoScreen === 'personal-editor' && snapshot.surfaces.length === 0;
   if (!historyReady) return <div className="loading"><span className="brand-mark"><Icon name="spark"/></span><p>正在打开你的空间…</p></div>;
   return <div className="app-frame">
-    <aside className="sidebar" inert={isAbout || isTodoEditor}><div className="brand"><span className="brand-mark"><Icon name="spark"/></span><span><strong>Life Space</strong></span></div><nav aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={`nav-link ${snapshot.module === id ? 'active' : ''}`} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span><span className="nav-dot"/></button>)}</nav><button className="sidebar-settings" disabled={isSettings} onClick={() => showSurface('settings')}><Icon name="settings"/> 设置</button><div className="sidebar-foot">给生活留一点<br/>柔软的空间。</div></aside>
+    <aside className={`sidebar ${isAnniversaryDeleteOpen ? 'anniversary-nav-on-top' : ''}`} inert={isAbout || isTodoEditor}><div className="brand"><span className="brand-mark"><Icon name="spark"/></span><span><strong>Life Space</strong></span></div><nav aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={`nav-link ${snapshot.module === id ? 'active' : ''}`} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span><span className="nav-dot"/></button>)}</nav><button className="sidebar-settings" disabled={isSettings} onClick={() => showSurface('settings')}><Icon name="settings"/> 设置</button><div className="sidebar-foot">给生活留一点<br/>柔软的空间。</div></aside>
     <main className="main-area" inert={isAbout || isTodoEditor}><header className="mobile-header"><div className="mobile-brand"><span className="brand-mark"><Icon name="spark"/></span><span>Life Space</span></div><button className="icon-button" disabled={isSettings} onClick={() => showSurface('settings')} aria-label="打开设置"><Icon name="settings"/></button></header>
       {MODULES.map((id) => <div key={id} className={`module-holder ${snapshot.module === id && !isSettings ? 'visible' : ''}`} hidden={snapshot.module !== id || isSettings}>
-        {id === 'todo' && snapshot.pages.todo === 'home' ? <TodoModule snapshot={snapshot} onSpaceChange={showTodoSpace} onScreenChange={showTodoScreen} showSurface={showSurface} onBack={() => void back()} active={snapshot.module === 'todo' && !isSettings}/> : id === 'period' && snapshot.pages.period === 'home' ? <PeriodModule active={snapshot.module === 'period' && !isSettings} screen={snapshot.periodScreen} dialogOpen={snapshot.surfaces.at(-1) === 'period-dialog'} onScreen={showPeriodScreen} onDialog={() => showSurface('period-dialog')} onBack={() => void back()} onError={onError}/> : <ModulePage module={id} page={snapshot.pages[id]} onGuide={showGuide} onBack={() => void back()}/>}
+        {id === 'todo' && snapshot.pages.todo === 'home' ? <TodoModule snapshot={snapshot} onSpaceChange={showTodoSpace} onScreenChange={showTodoScreen} showSurface={showSurface} onBack={() => void back()} active={snapshot.module === 'todo' && !isSettings}/> : id === 'period' && snapshot.pages.period === 'home' ? <PeriodModule active={snapshot.module === 'period' && !isSettings} screen={snapshot.periodScreen} dialogOpen={snapshot.surfaces.at(-1) === 'period-dialog'} onScreen={showPeriodScreen} onDialog={() => showSurface('period-dialog')} onBack={() => void back()} onError={onError}/> : id === 'anniversary' && snapshot.pages.anniversary === 'home' ? <AnniversaryModule snapshot={snapshot} active={snapshot.module === 'anniversary' && !isSettings} onScreen={showAnniversaryScreen} onSurface={showSurface} onBack={() => void back()} onReturnHome={returnAnniversaryHome} onError={onError}/> : <ModulePage module={id} page={snapshot.pages[id]} onGuide={showGuide} onBack={() => void back()}/>}
       </div>)}
       {isSettings && <SettingsPage onBack={() => void back()} onAbout={() => showSurface('about')}/>}
-      <nav className="bottom-nav" aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={snapshot.module === id ? 'active' : ''} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span></button>)}</nav>
+      <nav className={`bottom-nav ${isAnniversaryDeleteOpen ? 'anniversary-nav-on-top' : ''}`} aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={snapshot.module === id ? 'active' : ''} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span></button>)}</nav>
     </main>
     {isAbout && <AboutDialog onClose={() => void back()}/>}
     {exitHint && <div className="toast" role="status">再按一次返回键退出测试版</div>}

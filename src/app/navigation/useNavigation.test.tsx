@@ -172,3 +172,43 @@ describe('Period navigation', () => {
     await waitPeriodState((state) => state.periodScreen === 'calendar');
   });
 });
+
+describe('Anniversary navigation', () => {
+  beforeEach(() => {
+    native.platform = false;
+    history.replaceState(null, '');
+  });
+
+  it('returns delete confirmation and editor through detail to the home screen', async () => {
+    const { result } = renderHook(() => useNavigation('anniversary', () => undefined));
+    await waitFor(() => expect((history.state as { depth: number }).depth).toBe(0));
+    act(() => result.current.showAnniversaryScreen('detail', 'record-a'));
+    await waitFor(() => expect(result.current.snapshot).toMatchObject({ anniversaryScreen: 'detail', anniversaryRecordId: 'record-a' }));
+    act(() => result.current.showSurface('anniversary-delete'));
+    await waitFor(() => expect(result.current.snapshot.surfaces.at(-1)).toBe('anniversary-delete'));
+    act(() => { void result.current.back(); });
+    await waitFor(() => expect(result.current.snapshot).toMatchObject({ anniversaryScreen: 'detail', surfaces: [] }));
+    act(() => result.current.showAnniversaryScreen('editor', 'record-a'));
+    await waitFor(() => expect(result.current.snapshot).toMatchObject({ anniversaryScreen: 'editor', anniversaryEditorReturn: 'detail' }));
+    act(() => { void result.current.back(); });
+    await waitFor(() => expect(result.current.snapshot.anniversaryScreen).toBe('detail'));
+    act(() => { void result.current.back(); });
+    await waitFor(() => expect(result.current.snapshot).toMatchObject({ anniversaryScreen: 'home', anniversaryRecordId: null }));
+  });
+
+  it('returns a create editor to home and restores a detail route after changing modules', async () => {
+    const { result } = renderHook(() => useNavigation('anniversary', () => undefined));
+    await waitFor(() => expect((history.state as { depth: number }).depth).toBe(0));
+    act(() => result.current.showAnniversaryScreen('editor'));
+    await waitFor(() => expect(result.current.snapshot).toMatchObject({ anniversaryScreen: 'editor', anniversaryEditorReturn: 'home' }));
+    act(() => { void result.current.back(); });
+    await waitFor(() => expect(result.current.snapshot.anniversaryScreen).toBe('home'));
+
+    act(() => result.current.showAnniversaryScreen('detail', 'record-b'));
+    await waitFor(() => expect(result.current.snapshot.anniversaryScreen).toBe('detail'));
+    act(() => result.current.selectModule('period'));
+    await waitFor(() => expect(result.current.snapshot.module).toBe('period'));
+    act(() => result.current.selectModule('anniversary'));
+    await waitFor(() => expect(result.current.snapshot).toMatchObject({ module: 'anniversary', anniversaryScreen: 'detail', anniversaryRecordId: 'record-b', surfaces: [] }));
+  });
+});

@@ -333,6 +333,9 @@ describe('minimal personal Todo', () => {
     await waitFor(async () => expect((await coupleRepository.listItems()).find((item) => item.title === '在家看电影')?.scheduledDate).toBe(todayKey()));
     expect(secondCard.getAttribute('aria-expanded')).toBe('false');
 
+    // Pointer-up may reparent this card into the other column; query its live node before the next gesture.
+    secondCard = coupleCard('在家看电影');
+    expect(secondCard.isConnected).toBe(true);
     vi.useFakeTimers();
     fireEvent.pointerDown(secondCard, { pointerId: 12, pointerType: 'touch', button: 0, clientX: 10, clientY: 10 });
     act(() => vi.advanceTimersByTime(299));

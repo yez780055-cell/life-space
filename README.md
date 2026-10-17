@@ -24,13 +24,15 @@ Life Space 是 React 19、TypeScript、Vite 和 Capacitor 7 构建的个人生�
 
 ## Phase 3A：小月历
 
-小月历使用 `life-space` IndexedDB v5 中独立的 `periodRecords`、`periodSettings` stores。v4 升级只新增这两个 store，不清空或改写个人待办、情侣待办、全局设置或模块状态。实际与预测经期使用不同颜色；页面支持按月浏览、触屏横向轻扫、日期详情、开始/结束/撤销、历史补录与编辑删除、真实记录统计、周期参数、关怀备忘、提醒、Period 页面 PIN 和加密备份。
+小月历使用 `life-space` IndexedDB 中独立的 `periodRecords`、`periodSettings` stores。v4 升级只新增这两个 store，不清空或改写个人待办、情侣待办、全局设置或模块状态。实际与预测经期使用不同颜色；页面支持按月浏览、触屏横向轻扫、日期详情、开始/结束/撤销、历史补录与编辑删除、真实记录统计、周期参数、关怀备忘、提醒、Period 页面 PIN 和加密备份。
 
 从旧小月历迁入时，先在旧小月历导出加密 `.xyl` 文件，再在 Life Space 的“小月历设置 → 从旧小月历导入”选择文件并输入备份密码。解密通过后先显示记录数量和日期范围；如果本机已有小月历内容，确认前请先导出当前备份，并再次确认替换。导入只替换 Period 数据，不会读取旧网站、合并重复记录或修改其他空间。旧站点与 Life Space 是不同 origin，不能自动读取旧站 IndexedDB；迁移必须由用户主动选择 `.xyl` 文件。
 
 Period 内容仅存于当前设备的 `periodRecords`、`periodSettings` stores。PIN 只遮挡 Period 页面，不加密设备数据库；旧版 `.xyl` 格式本身不包含 PIN，导入会保留当前 Life Space 的 PIN。加密备份使用旧版兼容的 PBKDF2-SHA-256（250,000 次）和 AES-GCM-256；不提供明文导出。浏览器提醒仅在用户授权且小月历打开时尝试，网页关闭或系统挂起时不保证送达。数据格式、导入步骤、兼容差异和人工验收清单见 [docs/period-integration.md](docs/period-integration.md)。
 
-Anniversary 仍是后续 Phase 3B 的独立范围，本阶段不实现或改动其业务功能。
+## Phase 3B：纪念日
+
+纪念日保存在 `life-space` IndexedDB v6 的专用 `anniversaryRecords` store。v5→v6 只增加该 store，不重建或清空设置、个人待办、情侣待办或 Period 数据。首页从周年、仅一次日期和所有未过期天数节点中选择最早事件作为主项；并列出从该日期起连续 7 个自然日内的其他事件，单项时不显示空周列表。同一记录同一天的周年与节点合并展示。全部纪念日列表仍保留。支持每年重复与仅一次、详情、备注、编辑及二次确认删除。可按每条记录开启自定义天数节点：原始日期当天计作第 1 天，节点日期自动按本地公历日计算。周年闰日的非闰年发生日按 2 月 28 日处理；连续天数节点仍按公历日逐日递增。数据只在当前设备本地保存，没有账号、云同步、提醒、照片、标签或统计图表。完整规则与验收项见 [docs/anniversary.md](docs/anniversary.md)。
 
 ## 预览与部署
 
@@ -44,4 +46,4 @@ GitHub Pages 使用 Vite 的 `/life-space/` 子路径。Playwright 检查该子�
 
 ## 范围
 
-Phase 2C 不包含已连接的后端、账号流程、跨设备同步、可靠后台提醒或 Android APK。Android 真机验收和正式发布另行安排。
+Life Space 当前没有已连接的后端或账号流程；Todo、Couple、Period 和 Anniversary 数据按各自的数据域保存在当前设备。Anniversary V1 不含跨设备同步、提醒、照片、标签、统计或 Android APK。Android 真机验收和正式发布另行安排。

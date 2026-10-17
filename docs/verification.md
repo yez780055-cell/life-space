@@ -1,5 +1,22 @@
 # Life Space 网页验证记录
 
+## Phase 3B 首页期待周与天数节点候选（2026-10-17）
+
+- 分支：`feat/anniversary-v1`，继续更新现有 Draft PR #7；没有创建新 PR。
+- 首页候选统一由周年、今天/未来单次日期、以及全部今天/未来天数节点组成。最近日期成为 Hero 锚点；从锚点到锚点后第 6 个公历日（含）内的其余事件列为同一期待周。单周仅一个事件时隐藏列表；同一记录同日周年/单次事项与节点合并并保留语义标签。
+- 本地检查：`npm run typecheck`、`npm run lint`、`npm test -- --run`（20 个文件、144 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：生产预览桌面与触控流程通过；新增合成期待节点作为最近 Hero、锚点窗口内多个节点/周年/单次日期、锚点后第 7 天排除、同日事件并列、周内点击打开正确详情，以及 320/360/390/430px 与放大文字布局。Todo、Couple、Period、PWA 原回归也通过。
+- 浏览器检查使用隔离 Chromium profile 和合成数据；截图放在忽略目录 `node_modules/.cache/phase3b-expectation`。GitHub Actions [Foundation Web checks #41](https://github.com/yez780055-cell/life-space/actions/runs/39001553422) 在实现提交 `07e920723ac5eac7f2a543b6f74a331cc82a7d28` 上全部通过，包括浏览器验证步骤。
+
+## Phase 3B 纪念日模块 V1（2026-10-17）
+
+- 基线：`main` / Phase 3A merge commit `34da1b01be95bf53fea330a1120c724e7d9894ee`；功能分支：`feat/anniversary-v1`。
+- 本地检查：`npm run typecheck`、`npm run lint`、`npm test -- --run`（19 个文件、117 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机 Chromium 生产预览通过。桌面覆盖周年/一次性记录、创建与编辑、ID 稳定、删除取消和确认、Tab 切换时删除确认收起，以及 Anniversary CRUD 前后 Todo、Couple、Period、设置和模块 stores 保持一致。
+- 移动覆盖 320、360、390、430px，放大文字、长标题/备注、短视口编辑表单滚动和保存按钮可达；无横向溢出。PWA manifest、Service Worker、scope 和 start URL 均与本机预览一致。
+- 浏览器验证仅使用合成记录，截图写入忽略目录 `.artifacts/browser-preview`。自动化没有访问真人数据。Android 实体设备的系统返回、软键盘遮挡、安全区 inset 和屏幕阅读器仍待人工验收。
+- GitHub Actions：待推送提交触发后补记运行链接与状态。
+
 ## Phase 3A 小月历整合（2026-10-16）
 
 - 基线：`main` / Phase 2C merge commit `6560dd2bb033a63e580d6ee313b9ed425aaf383f`。开发分支：`feat/period-integration`。独立只读源仓库 `xiaoyueli/main` HEAD：`ff72014e9c691d2bbd18a57d8e2966405f507386`。
@@ -70,3 +87,14 @@ PR：[Life Space Phase 2B：个人待办与周期任务 #3](https://github.com/y
 Pages 只有一个站点：推送 `feat/todo-phase-2b` 会替换此开发预览；旧 `feat/todo-phase-2a` 分支推送不再触发部署。预览地址：<https://yez780055-cell.github.io/life-space/>。
 
 该预览用于网页开发验收，不代表合并或正式发布。没有进行 Android APK 构建或真机测试。
+
+## Phase 3B：纪念日 V1
+
+- 基线：`main` / `origin/main`，`34da1b01be95bf53fea330a1120c724e7d9894ee`（Phase 3A 合并）。
+- 功能分支：`feat/anniversary-v1`。
+- `npm run typecheck`、`npm run lint`、`npm test -- --run`（20 个测试文件、138 项）、`npm run build`、`node --check scripts/verify-browser.mjs`、`git diff --check`：通过。
+- `npm run verify:browser`：本机生产预览通过；覆盖现有 Todo、Couple、Period 回归，纪念日创建/编辑/删除、节点排序去重/删除/开关/刷新、未来日期与周年/仅一次、数据隔离，手机 320、360、390、430px，多节点 chip 换行、较大文字、短视口数字输入和 PWA manifest/Service Worker 控制状态。截图保存在忽略目录 `.artifacts/browser-preview`。
+- 浏览器验证使用本机 `http://127.0.0.1:4190/` 预览。此次预览 scope 与 manifest 一致；GitHub Pages `/life-space/` 子路径由 PR CI 验证。
+- 天数节点域测试还在 `America/Los_Angeles` 时区运行，覆盖 2026 年春季与秋季 DST 切换日期；天数计算保持不受时区影响。
+- GitHub Actions：[Foundation Web checks 运行 #39](https://github.com/yez780055-cell/life-space/actions/runs/38999261331)：对包含自定义天数节点的提交 `5a3cd562dddd0967d5941f6bbd922ebac36a8e63` 全部通过；TypeScript、ESLint、20 个测试文件、production build、Chromium 桌面/手机浏览器步骤和截图归档均成功。
+- Android 真机系统返回、软键盘遮挡与安全区 inset 尚待人工验收；本阶段不构建 APK。
