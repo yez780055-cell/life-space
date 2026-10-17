@@ -10,6 +10,33 @@ await mkdir(screenshotDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, ...(process.env.LIFE_SPACE_CHROMIUM_PATH ? { executablePath: process.env.LIFE_SPACE_CHROMIUM_PATH } : {}), args: ['--no-sandbox'] });
 const shot = (page, name) => page.screenshot({ path: join(screenshotDir, name), fullPage: true });
 
+function dateOrdinal(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const previousYear = year - 1;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const offsets = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+  return previousYear * 365 + Math.floor(previousYear / 4) - Math.floor(previousYear / 100) + Math.floor(previousYear / 400) + offsets[month - 1] + (month > 2 && leap ? 1 : 0) + day - 1;
+}
+
+function addCalendarDateDays(dateKey, offset) {
+  let [year, month, day] = dateKey.split('-').map(Number);
+  let remaining = offset;
+  while (remaining > 0) {
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = month === 2 ? (leap ? 29 : 28) : ([4, 6, 9, 11].includes(month) ? 30 : 31);
+    if (day < daysInMonth) day += 1;
+    else if (month < 12) { month += 1; day = 1; }
+    else { year += 1; month = 1; day = 1; }
+    remaining -= 1;
+  }
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function formatDateKeyForBrowser(dateKey) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return `${year}年${month}月${day}日`;
+}
+
 async function waitForSpace(page, space) {
   await page.waitForFunction((expected) => document.querySelector('.todo-module-root')?.getAttribute('data-current-space') === expected, space, { timeout: 3000 });
   await page.locator('.todo-module-root .todo-module-page:not(.is-space-changing)').waitFor();
@@ -635,25 +662,79 @@ try {
   await page.getByLabel('名称').fill('浏览器年度纪念日');
   await page.getByLabel('日期', { exact: true }).fill('2024-02-29');
   await page.getByLabel('备注').fill('合成数据：周年测试');
+  const yearlyDayToggle = page.getByRole('checkbox', { name: '天数纪念' });
+  if (await yearlyDayToggle.isChecked()) throw new Error('New Anniversary records should default day milestones off');
+  await yearlyDayToggle.check();
+  const anniversaryTodayKey = await page.evaluate(() => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
+  const anniversaryCurrentDay = dateOrdinal(anniversaryTodayKey) - dateOrdinal('2024-02-29') + 1;
+  if (anniversaryCurrentDay < 1) throw new Error('Browser Anniversary test date unexpectedly precedes its synthetic record');
+  const enteredMilestoneDays = [500, 520, 600, 666, 1000, 1314, 520, anniversaryCurrentDay + 10];
+  const expectedMilestoneDays = [...new Set(enteredMilestoneDays)].sort((left, right) => left - right);
+  const milestoneInput = page.getByRole('spinbutton', { name: '添加天数节点' });
+  for (const day of enteredMilestoneDays) {
+    await milestoneInput.fill(String(day));
+    await page.getByRole('button', { name: '＋添加' }).click();
+  }
   await page.getByRole('button', { name: '保存' }).click();
   await page.getByRole('button', { name: '查看最近纪念日：浏览器年度纪念日' }).waitFor();
   await page.getByRole('button', { name: '查看最近纪念日：浏览器年度纪念日' }).click();
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
   const yearlyBeforeEdit = (await readAnniversaryRecords(page)).find((record) => record.title === '浏览器年度纪念日');
-  if (!yearlyBeforeEdit || yearlyBeforeEdit.date !== '2024-02-29' || yearlyBeforeEdit.recurrence !== 'yearly') throw new Error(`Anniversary yearly record did not persist its original local date: ${JSON.stringify(yearlyBeforeEdit)}`);
+  if (!yearlyBeforeEdit || yearlyBeforeEdit.date !== '2024-02-29' || yearlyBeforeEdit.recurrence !== 'yearly' || !yearlyBeforeEdit.milestoneEnabled || JSON.stringify(yearlyBeforeEdit.milestoneDays) !== JSON.stringify(expectedMilestoneDays)) throw new Error(`Anniversary yearly record or its custom milestones did not persist correctly: ${JSON.stringify(yearlyBeforeEdit)}`);
+  const nextMilestoneDay = expectedMilestoneDays.find((day) => day >= anniversaryCurrentDay);
+  const milestoneSummary = await page.getByRole('region', { name: '天数纪念' }).innerText();
+  if (!milestoneSummary.includes(`相伴第 ${anniversaryCurrentDay} 天`)) throw new Error(`Anniversary current day count is incorrect: ${milestoneSummary}`);
+  if (nextMilestoneDay === undefined) throw new Error('Browser test did not configure a future milestone');
+  const expectedMilestoneStatus = nextMilestoneDay === anniversaryCurrentDay ? `${nextMilestoneDay} 天 · 就是今天` : `下一节点 ${nextMilestoneDay} 天 · 还有 ${nextMilestoneDay - anniversaryCurrentDay} 天`;
+  const expectedMilestoneDate = addCalendarDateDays('2024-02-29', nextMilestoneDay - 1);
+  if (!milestoneSummary.includes(expectedMilestoneStatus) || !milestoneSummary.includes(`${nextMilestoneDay} 天：${formatDateKeyForBrowser(expectedMilestoneDate)}`)) throw new Error(`Anniversary next milestone date or countdown is incorrect: ${milestoneSummary}`);
   await shot(page, 'anniversary-desktop-detail.png');
   await page.getByRole('button', { name: '编辑' }).click();
   await page.getByLabel('名称').fill('更新后的年度纪念日');
+  await page.getByRole('button', { name: '删除 520 天节点' }).click();
   await page.getByRole('button', { name: '保存' }).click();
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
   const yearlyAfterEdit = (await readAnniversaryRecords(page)).find((record) => record.title === '更新后的年度纪念日');
-  if (!yearlyAfterEdit || yearlyAfterEdit.id !== yearlyBeforeEdit.id || yearlyAfterEdit.createdAt !== yearlyBeforeEdit.createdAt) throw new Error('Anniversary edit changed the stable record ID or creation time');
+  const editedMilestoneDays = expectedMilestoneDays.filter((day) => day !== 520);
+  if (!yearlyAfterEdit || yearlyAfterEdit.id !== yearlyBeforeEdit.id || yearlyAfterEdit.createdAt !== yearlyBeforeEdit.createdAt || JSON.stringify(yearlyAfterEdit.milestoneDays) !== JSON.stringify(editedMilestoneDays)) throw new Error('Anniversary edit changed the stable ID/time or did not remove the selected milestone');
+  await page.getByRole('button', { name: '编辑' }).click();
+  await page.getByRole('checkbox', { name: '天数纪念' }).uncheck();
+  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  const milestonesWhenDisabled = (await readAnniversaryRecords(page)).find((record) => record.id === yearlyBeforeEdit.id);
+  if (!milestonesWhenDisabled || milestonesWhenDisabled.milestoneEnabled || JSON.stringify(milestonesWhenDisabled.milestoneDays) !== JSON.stringify(editedMilestoneDays)) throw new Error('Disabling day milestones should hide the feature but retain its configured nodes');
+  if (await page.getByRole('region', { name: '天数纪念' }).count()) throw new Error('Disabled day milestones remained visible in Anniversary detail');
+  await page.getByRole('button', { name: '编辑' }).click();
+  await page.getByRole('checkbox', { name: '天数纪念' }).check();
+  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  const milestonesWhenReenabled = (await readAnniversaryRecords(page)).find((record) => record.id === yearlyBeforeEdit.id);
+  if (!milestonesWhenReenabled?.milestoneEnabled || JSON.stringify(milestonesWhenReenabled.milestoneDays) !== JSON.stringify(editedMilestoneDays)) throw new Error('Re-enabling day milestones did not restore the retained nodes');
+  await page.getByRole('button', { name: '返回' }).click();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await desktopNav.getByRole('button', { name: '纪念日' }).waitFor();
+  await desktopNav.getByRole('button', { name: '纪念日' }).click();
+  await page.getByRole('button', { name: '查看最近纪念日：更新后的年度纪念日' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  if (!await page.getByRole('region', { name: '天数纪念' }).innerText().then((text) => text.includes(`相伴第 ${anniversaryCurrentDay} 天`))) throw new Error('Anniversary milestones did not survive a page refresh');
   await page.getByRole('button', { name: '返回' }).click();
   await page.getByRole('button', { name: '新建纪念日' }).click();
   await page.getByLabel('名称').fill('浏览器一次性日期');
   await page.getByLabel('日期', { exact: true }).fill('2099-01-01');
   await page.getByRole('radio', { name: /仅一次/ }).check();
+  await page.getByRole('checkbox', { name: '天数纪念' }).check();
+  for (const day of [1, 500]) {
+    await page.getByRole('spinbutton', { name: '添加天数节点' }).fill(String(day));
+    await page.getByRole('button', { name: '＋添加' }).click();
+  }
   await page.getByRole('button', { name: '保存' }).click();
+  const oneTimeWithMilestones = (await readAnniversaryRecords(page)).find((record) => record.title === '浏览器一次性日期');
+  if (!oneTimeWithMilestones?.milestoneEnabled || JSON.stringify(oneTimeWithMilestones.milestoneDays) !== JSON.stringify([1, 500])) throw new Error('Once-only Anniversary records should also support independent day milestones');
+  await page.getByRole('button', { name: '查看纪念日：浏览器一次性日期' }).click();
+  await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  const futureMilestoneSummary = await page.getByRole('region', { name: '天数纪念' }).innerText();
+  if (!futureMilestoneSummary.includes('纪念日尚未开始') || futureMilestoneSummary.includes('相伴第 -')) throw new Error(`A future Anniversary date showed an invalid negative day count: ${futureMilestoneSummary}`);
+  await page.getByRole('button', { name: '返回' }).click();
   await page.getByRole('button', { name: '查看最近纪念日：更新后的年度纪念日' }).waitFor();
   await shot(page, 'anniversary-desktop-home.png');
   await page.getByRole('button', { name: '查看最近纪念日：更新后的年度纪念日' }).click();
@@ -860,16 +941,36 @@ try {
   await mobilePage.getByLabel('名称').fill(longAnniversaryTitle);
   await mobilePage.getByLabel('日期', { exact: true }).fill('2099-03-01');
   await mobilePage.getByLabel('备注').fill('合成备注。'.repeat(80));
+  await mobilePage.getByRole('checkbox', { name: '天数纪念' }).check();
+  const mobileMilestoneInput = mobilePage.getByRole('spinbutton', { name: '添加天数节点' });
+  const mobileMilestoneDays = [500, 520, 600, 666, 1000, 1001, 1314, 2000];
+  for (const day of mobileMilestoneDays) {
+    await mobileMilestoneInput.tap();
+    await mobileMilestoneInput.fill(String(day));
+    const addMilestoneButton = mobilePage.getByRole('button', { name: '＋添加' });
+    await addMilestoneButton.scrollIntoViewIfNeeded();
+    await addMilestoneButton.tap();
+  }
+  const mobileChipRows = await mobilePage.locator('.anniversary-milestone-chip').evaluateAll((chips) => new Set(chips.map((chip) => Math.round(chip.getBoundingClientRect().y))).size);
+  if (mobileChipRows < 2) throw new Error('Custom milestone chips did not wrap on the narrow mobile editor');
+  for (const width of [320, 360, 390, 430]) {
+    await mobilePage.setViewportSize({ width, height: 320 });
+    const scrollWidth = await mobilePage.evaluate(() => document.documentElement.scrollWidth);
+    if (scrollWidth > width) throw new Error(`Anniversary milestone editor overflows at ${width}px (${scrollWidth}px)`);
+  }
+  await mobilePage.setViewportSize({ width: 390, height: 320 });
   const anniversaryEditorScroll = await mobilePage.locator('.module-holder:visible').evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
   if (anniversaryEditorScroll.scrollHeight <= anniversaryEditorScroll.clientHeight) throw new Error('Anniversary editor did not scroll in a short keyboard-sized viewport');
   await mobilePage.getByRole('button', { name: '保存' }).scrollIntoViewIfNeeded();
   await mobilePage.getByRole('button', { name: '保存' }).tap();
   await mobilePage.getByRole('button', { name: `查看最近纪念日：${longAnniversaryTitle}` }).waitFor();
+  const mobileAnniversaryRecord = (await readAnniversaryRecords(mobilePage)).find((record) => record.title === longAnniversaryTitle);
+  if (!mobileAnniversaryRecord?.milestoneEnabled || JSON.stringify(mobileAnniversaryRecord.milestoneDays) !== JSON.stringify(mobileMilestoneDays)) throw new Error('Mobile day milestone entry did not persist all user-entered nodes');
   if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 390) throw new Error('Long Anniversary title or note caused horizontal overflow on mobile');
   await shot(mobilePage, 'anniversary-mobile-home.png');
   await mobile.close();
 
-  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', periodToggleUndoBackfillEdit: 'passed', periodPinIsolation: 'passed', periodEncryptedExportImportIsolation: 'passed', anniversaryCreateEditDeleteNavigationAndStoreIsolation: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', periodCalendarSwipeAndDateSelection: 'passed', anniversaryWidthsFontScaleLongTextAndEditorScroll: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', periodNoHorizontalOverflowWithTextScale: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
+  console.log(JSON.stringify({ desktop: { quickAddAndRepeatEntry: 'passed', selectedDateAndDateBrowse: 'passed', completionAndUndo: 'passed', foldedCompletedRestore: 'passed', titleDateEdit: 'passed', coupleCrud: 'passed', coupleQuickAndDetailAdd: 'passed', coupleDragThresholdTapDropAndPersistence: 'passed', coupleTagOrFilter: 'passed', coupleHistoryAndRestore: 'passed', personalDataPreserved: 'passed', periodToggleUndoBackfillEdit: 'passed', periodPinIsolation: 'passed', periodEncryptedExportImportIsolation: 'passed', anniversaryCreateEditDeleteNavigationStoreIsolationAndCustomDayMilestones: 'passed', moduleNavigationAndSettings: 'passed' }, mobile: { quickAdd: 'passed', completionAndUndo: 'passed', coupleDetailAddTagFilterAndCompletion: 'passed', touchScrollAndLongPressDrag: 'passed', periodCalendarSwipeAndDateSelection: 'passed', anniversaryWidthsFontScaleLongTextEditorScrollAndCustomDayMilestoneChips: 'passed', widths: [320, 360, 390, 430], coupleBoardNoHorizontalOverflow: 'passed', periodNoHorizontalOverflowWithTextScale: 'passed', noHorizontalOverflow: 'passed', fabInViewport: 'passed' }, pwa, screenshots: screenshotDir }, null, 2));
 } finally {
   await browser.close();
 }

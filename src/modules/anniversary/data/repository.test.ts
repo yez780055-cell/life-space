@@ -19,8 +19,34 @@ describe('Anniversary repository', () => {
     const yearly = await createAnniversary({ title: '  相识日  ', date: '2024-06-24', recurrence: 'yearly' });
     const once = await createAnniversary({ title: '旅行', date: '2024-06-24', recurrence: 'once' });
     expect(yearly.title).toBe('相识日');
+    expect(yearly).toMatchObject({ milestoneEnabled: false, milestoneDays: [] });
     expect(yearly.id).not.toBe(once.id);
     expect(await listAnniversaries()).toHaveLength(2);
+  });
+
+  it('normalizes custom milestones on create and update and rejects invalid or out-of-range nodes', async () => {
+    const created = await createAnniversary({ title: '节点', date: '2024-01-01', recurrence: 'once', milestoneEnabled: true, milestoneDays: [1314, 500, 520, 500] });
+    expect(created).toMatchObject({ milestoneEnabled: true, milestoneDays: [500, 520, 1314] });
+    const updated = await updateAnniversary(created.id, { title: '节点', date: '2024-01-01', recurrence: 'yearly', milestoneEnabled: false, milestoneDays: [666, 520, 666] });
+    expect(updated).toMatchObject({ id: created.id, createdAt: created.createdAt, milestoneEnabled: false, milestoneDays: [520, 666] });
+    await expect(createAnniversary({ title: '非法节点', date: '2024-01-01', recurrence: 'once', milestoneDays: [0] })).rejects.toThrow('大于 0 的整数');
+    await expect(createAnniversary({ title: '日期边界', date: '9999-12-31', recurrence: 'once', milestoneDays: [2] })).rejects.toThrow('不能超过 1 天');
+  });
+
+  it('reads v6 records written before the milestone fields existed without rewriting them', async () => {
+    const legacy = { id: 'legacy-v6', title: '旧版纪念日', date: '2024-02-29', recurrence: 'yearly', createdAt: '2024-02-29T00:00:00.000Z', updatedAt: '2024-02-29T00:00:00.000Z' };
+    const db = await openDatabase();
+    const tx = db.transaction('anniversaryRecords', 'readwrite');
+    tx.objectStore('anniversaryRecords').put(legacy);
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    expect(await listAnniversaries()).toEqual([{ ...legacy, milestoneEnabled: false, milestoneDays: [] }]);
+    expect(db.version).toBe(6);
+    expect(await new Promise<unknown>((resolve, reject) => {
+      const request = db.transaction('anniversaryRecords', 'readonly').objectStore('anniversaryRecords').get(legacy.id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    })).toEqual(legacy);
+    db.close();
   });
 
   it('validates required values and normalizes optional notes', async () => {

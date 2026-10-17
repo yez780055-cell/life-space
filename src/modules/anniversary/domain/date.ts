@@ -61,6 +61,38 @@ export function dateOrdinal(value: AnniversaryDate): number {
   return daysBeforeYear(parts.year) + beforeMonth + parts.day - 1;
 }
 
+export const LAST_SUPPORTED_DATE: AnniversaryDate = '9999-12-31';
+
+/** Converts a Gregorian day ordinal back to a supported local calendar date. */
+export function dateKeyFromOrdinal(ordinal: number): AnniversaryDate {
+  const lastOrdinal = dateOrdinal(LAST_SUPPORTED_DATE);
+  if (!Number.isInteger(ordinal) || ordinal < 0 || ordinal > lastOrdinal) {
+    throw new RangeError('日期超出支持范围（0001-01-01 至 9999-12-31）。');
+  }
+
+  let low = 1;
+  let high = 10_000;
+  while (low + 1 < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (daysBeforeYear(middle) <= ordinal) low = middle;
+    else high = middle;
+  }
+
+  let dayOfYear = ordinal - daysBeforeYear(low);
+  let month = 1;
+  while (dayOfYear >= daysInMonth(low, month)) {
+    dayOfYear -= daysInMonth(low, month);
+    month += 1;
+  }
+  return dateKeyFromParts({ year: low, month, day: dayOfYear + 1 });
+}
+
+/** Adds whole Gregorian calendar days without relying on local time or DST. */
+export function addCalendarDays(value: AnniversaryDate, offset: number): AnniversaryDate {
+  if (!Number.isInteger(offset)) throw new RangeError('日期偏移必须是整数。');
+  return dateKeyFromOrdinal(dateOrdinal(value) + offset);
+}
+
 export function calendarDayDifference(from: AnniversaryDate, to: AnniversaryDate): number {
   return dateOrdinal(to) - dateOrdinal(from);
 }

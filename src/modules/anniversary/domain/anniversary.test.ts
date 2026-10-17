@@ -3,7 +3,7 @@ import type { AnniversaryRecord } from '../types';
 import { anniversaryNumberLabel, nextYearlyDate, occurrenceFor, selectNextAnniversary, sortAnniversaries } from './anniversary';
 
 function record(id: string, date: string, recurrence: 'yearly' | 'once', createdAt = `2026-01-0${id.length}T00:00:00.000Z`): AnniversaryRecord {
-  return { id, title: id, date, recurrence, createdAt, updatedAt: createdAt };
+  return { id, title: id, date, recurrence, milestoneEnabled: false, milestoneDays: [], createdAt, updatedAt: createdAt };
 }
 
 describe('yearly anniversary occurrences', () => {

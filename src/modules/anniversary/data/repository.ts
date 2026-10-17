@@ -1,14 +1,35 @@
 import type { AnniversaryDraft, AnniversaryRecord } from '../types';
 import { isValidDateKey } from '../domain/date';
+import { normalizeMilestoneDays } from '../domain/milestones';
 import { openDatabase } from '../../../shared/storage/database';
 
-function normalizeDraft(draft: AnniversaryDraft): AnniversaryDraft {
+type NormalizedAnniversaryDraft = Omit<AnniversaryDraft, 'milestoneEnabled' | 'milestoneDays'> & Pick<AnniversaryRecord, 'milestoneEnabled' | 'milestoneDays'>;
+
+function normalizeDraft(draft: AnniversaryDraft): NormalizedAnniversaryDraft {
   const title = typeof draft.title === 'string' ? draft.title.trim() : '';
   const note = typeof draft.note === 'string' ? draft.note.trim() : '';
   if (!title) throw new Error('请填写纪念日名称。');
   if (!isValidDateKey(draft.date)) throw new Error('请选择有效日期。');
   if (draft.recurrence !== 'yearly' && draft.recurrence !== 'once') throw new Error('请选择纪念日类型。');
-  return { title, date: draft.date, recurrence: draft.recurrence, ...(note ? { note } : {}) };
+  if (draft.milestoneEnabled !== undefined && typeof draft.milestoneEnabled !== 'boolean') throw new Error('天数纪念开关设置无效。');
+  const milestoneEnabled = draft.milestoneEnabled ?? false;
+  const milestoneDays = normalizeMilestoneDays(draft.milestoneDays ?? [], draft.date);
+  return {
+    title,
+    date: draft.date,
+    recurrence: draft.recurrence,
+    ...(note ? { note } : {}),
+    milestoneEnabled,
+    milestoneDays
+  };
+}
+
+function normalizeStoredRecord(value: AnniversaryRecord): AnniversaryRecord {
+  const milestoneEnabled = typeof value.milestoneEnabled === 'boolean' ? value.milestoneEnabled : false;
+  let milestoneDays: number[] = [];
+  try { milestoneDays = normalizeMilestoneDays(value.milestoneDays ?? [], value.date); }
+  catch { /* Ignore invalid legacy extension fields without rewriting the stored record. */ }
+  return { ...value, milestoneEnabled, milestoneDays };
 }
 
 function storageError(error: unknown, fallback: string): Error {
@@ -40,7 +61,7 @@ export async function listAnniversaries(): Promise<AnniversaryRecord[]> {
       let records: AnniversaryRecord[] | undefined;
       request.onsuccess = () => { records = request.result as AnniversaryRecord[]; };
       request.onerror = () => { tx.abort(); };
-      tx.oncomplete = () => resolve(records ?? []);
+      tx.oncomplete = () => resolve((records ?? []).map(normalizeStoredRecord));
       tx.onerror = () => reject(storageError(tx.error, '读取纪念日失败，请检查设备存储。'));
       tx.onabort = () => reject(storageError(tx.error, '读取纪念日失败，请检查设备存储。'));
     });

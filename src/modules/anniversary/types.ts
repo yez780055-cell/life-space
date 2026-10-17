@@ -7,6 +7,8 @@ export interface AnniversaryRecord {
   date: AnniversaryDate;
   recurrence: AnniversaryRecurrence;
   note?: string;
+  milestoneEnabled: boolean;
+  milestoneDays: number[];
   createdAt: string;
   updatedAt: string;
 }
@@ -16,4 +18,6 @@ export interface AnniversaryDraft {
   date: AnniversaryDate;
   recurrence: AnniversaryRecurrence;
   note?: string;
+  milestoneEnabled?: boolean;
+  milestoneDays?: number[];
 }
