@@ -44,20 +44,47 @@ describe('Anniversary module UI', () => {
     render(<AnniversaryModule snapshot={initialSnapshot('anniversary')} active onScreen={onScreen} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
 
     const hero = await screen.findByRole('button', { name: '查看最近纪念日：首页节点主项' });
-    expect(hero.textContent).toContain('天数节点');
+    expect(hero.textContent).not.toContain('天数节点');
     expect(hero.textContent).toContain('第 12 天');
     expect(hero.textContent).toContain(formatDateKey(addCalendarDays(today, 1)));
-    expect(hero.textContent).toContain('还有 1 天');
+    expect(hero.textContent).toContain('还有1天');
     fireEvent.click(hero);
     expect(onScreen).toHaveBeenCalledWith('detail', milestoneRecord.id);
     const week = screen.getByRole('region', { name: '接下来这一周' });
+    expect(week.querySelector('.anniversary-section-count')?.textContent).toBe('3');
     expect(week.textContent).toContain('第 14 天');
     expect(week.textContent).toContain('首页周年项');
     expect(week.textContent).toContain('首次纪念日');
     expect(week.textContent).toContain('第六天事项');
     expect(week.textContent).not.toContain('窗口外事项');
+    expect(week.querySelector('.anniversary-week-range')?.textContent).toBe(`${formatDateKey(addCalendarDays(today, 1), { month: 'long', day: 'numeric' })} - ${formatDateKey(addCalendarDays(today, 7), { month: 'long', day: 'numeric' })}`);
+    const milestoneEvent = screen.getByRole('button', { name: '查看期待事项：首页节点主项，第 14 天' });
+    const yearlyEvent = screen.getByRole('button', { name: '查看期待事项：首页周年项，首次纪念日' });
+    const onceEvent = screen.getByRole('button', { name: '查看期待事项：第六天事项，一次' });
+    expect(milestoneEvent.querySelector('.anniversary-week-date')?.textContent).toContain(formatDateKey(addCalendarDays(today, 3)));
+    expect(yearlyEvent.querySelector('.anniversary-week-date')).toBeNull();
+    expect(onceEvent.querySelector('.anniversary-week-date')?.textContent).toContain(formatDateKey(addCalendarDays(today, 6)));
+    const allRecords = screen.getByRole('region', { name: '全部纪念日' });
+    expect(allRecords.querySelector('[aria-label="查看纪念日：首页周年项"] .anniversary-record-date')).toBeNull();
+    expect(allRecords.querySelector('[aria-label="查看纪念日：第六天事项"] .anniversary-record-date')?.textContent).toContain(formatDateKey(addCalendarDays(today, 6)));
     fireEvent.click(screen.getByRole('button', { name: '查看期待事项：首页周年项，首次纪念日' }));
     expect(onScreen).toHaveBeenCalledWith('detail', yearlyRecord.id);
+  });
+
+  it.each([
+    { recurrence: 'yearly' as const, expectedLabel: '首次纪念日' },
+    { recurrence: 'once' as const, expectedLabel: '一次' }
+  ])('always displays the event date and label in a $recurrence Hero', async ({ recurrence, expectedLabel }) => {
+    const today = localTodayKey();
+    const eventDate = addCalendarDays(today, 2);
+    const singleEvent: AnniversaryRecord = { ...record(eventDate, [], false), id: `hero-${recurrence}`, recurrence, title: `${recurrence}首页事项` };
+    listAnniversaries.mockResolvedValue([singleEvent]);
+    render(<AnniversaryModule snapshot={initialSnapshot('anniversary')} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
+
+    const hero = await screen.findByRole('button', { name: `查看最近纪念日：${singleEvent.title}` });
+    expect(hero.querySelector('.anniversary-hero-date')?.textContent).toContain(formatDateKey(eventDate));
+    expect(hero.querySelector('.anniversary-event-label')?.textContent).toBe(expectedLabel);
+    expect(hero.querySelector('.anniversary-countdown')?.textContent).toContain('还有2天');
   });
 
   it('keeps a single upcoming item as the only Hero without an empty week section', async () => {
@@ -65,7 +92,7 @@ describe('Anniversary module UI', () => {
     listAnniversaries.mockResolvedValue([{ ...record(addCalendarDays(today, 20), [], false), recurrence: 'once', title: '稍后的单次事项' }]);
     render(<AnniversaryModule snapshot={initialSnapshot('anniversary')} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
     const hero = await screen.findByRole('button', { name: '查看最近纪念日：稍后的单次事项' });
-    expect(hero.textContent).toContain('还有 20 天');
+    expect(hero.textContent).toContain('还有20天');
     expect(screen.queryByRole('region', { name: '接下来这一周' })).toBeNull();
   });
 
@@ -135,8 +162,10 @@ describe('Anniversary module UI', () => {
     listAnniversaries.mockResolvedValue([existing]);
     render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'detail', anniversaryRecordId: existing.id }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
     expect(await screen.findByText('相伴第 1 天')).toBeTruthy();
-    expect(screen.getByText('1 天 · 就是今天')).toBeTruthy();
-    expect(screen.getByText(`1 天：${formatDateKey(today)}`)).toBeTruthy();
+    const milestoneEvent = document.querySelector('.anniversary-milestone-next');
+    expect(milestoneEvent?.textContent).toContain('第 1 天');
+    expect(milestoneEvent?.textContent).toContain('就是今天');
+    expect(milestoneEvent?.textContent).toContain(formatDateKey(today));
   });
 
   it('shows the next-node countdown and its calculated date', async () => {
@@ -145,8 +174,10 @@ describe('Anniversary module UI', () => {
     listAnniversaries.mockResolvedValue([started]);
     render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'detail', anniversaryRecordId: started.id }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
     expect(await screen.findByText('相伴第 13 天')).toBeTruthy();
-    expect(screen.getByText('下一节点 20 天 · 还有 7 天')).toBeTruthy();
-    expect(screen.getByText(`20 天：${formatDateKey(addCalendarDays(started.date, 19))}`)).toBeTruthy();
+    const milestoneEvent = document.querySelector('.anniversary-milestone-next');
+    expect(milestoneEvent?.textContent).toContain('第 20 天');
+    expect(milestoneEvent?.textContent).toContain('还有7天');
+    expect(milestoneEvent?.textContent).toContain(formatDateKey(addCalendarDays(started.date, 19)));
   });
 
   it('marks every custom node complete when all have passed', async () => {
@@ -165,6 +196,8 @@ describe('Anniversary module UI', () => {
     render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'detail', anniversaryRecordId: future.id }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
     expect(await screen.findByText('纪念日尚未开始')).toBeTruthy();
     expect(screen.queryByText(/相伴第 -/)).toBeNull();
-    expect(screen.getByText('下一节点 1 天 · 还有 1 天')).toBeTruthy();
+    const milestoneEvent = document.querySelector('.anniversary-milestone-next');
+    expect(milestoneEvent?.textContent).toContain('第 1 天');
+    expect(milestoneEvent?.textContent).toContain('还有1天');
   });
 });

@@ -108,3 +108,114 @@
 @media(max-width:700px){.anniversary-page{padding:25px 20px calc(54px + var(--safe-bottom))}.anniversary-home-head,.anniversary-subhead{margin-bottom:19px}.anniversary-hero{gap:10px;border-radius:20px}.anniversary-list{margin-top:25px}.anniversary-record{gap:8px;padding:13px 11px}.anniversary-record-status{font-size:10px}.anniversary-record-copy strong{font-size:13px}.anniversary-detail-card footer{justify-content:stretch}.anniversary-detail-card footer button{flex:1}.anniversary-overlay{inset:0 0 calc(72px + var(--safe-bottom));align-items:end;padding:12px}.anniversary-confirm{padding:26px 21px;border-radius:20px}.anniversary-form{padding:17px;border-radius:18px}.anniversary-editor{padding-top:20px}}
 @media(max-width:360px){.anniversary-page{padding-left:14px;padding-right:14px}.anniversary-record{gap:6px;padding:12px 9px}.anniversary-record-status{max-width:78px;white-space:normal;text-align:right;line-height:1.35}.anniversary-record-arrow{width:14px;height:14px}.anniversary-hero-bottom{font-size:11px}.anniversary-week-event{grid-template-columns:48px minmax(0,1fr);gap:8px}.anniversary-week-countdown{grid-column:2;text-align:left;max-width:none}}
 @media(prefers-reduced-motion:reduce){.anniversary-hero,.anniversary-record,.anniversary-week-event{transition:none}}
+
+/* Compact, mobile-first anniversary home and matching detail event rows. */
+.anniversary-home-head{margin-bottom:18px}
+.anniversary-hero{gap:10px;padding:16px 18px;border-color:#f1d7ca;border-radius:20px;background:linear-gradient(115deg,#fff8f1 0%,#fff0eb 100%);box-shadow:none}
+.anniversary-hero-top{justify-content:flex-start;color:#9b6948;font-size:13px;font-weight:500}
+.anniversary-hero-top svg{display:none}
+.anniversary-hero-main{display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:11px;min-width:0}
+.anniversary-item-icon{width:44px;height:44px;display:grid;place-items:center;flex:none;border-radius:50%;background:#fff0f1;color:#ed7183}
+.anniversary-item-icon svg{width:24px;height:24px;fill:currentColor;stroke:currentColor;stroke-width:1.1}
+.anniversary-hero .anniversary-item-icon{width:48px;height:48px;background:#ffe8eb}
+.anniversary-hero-copy,.anniversary-week-copy,.anniversary-record-copy{min-width:0;display:grid;gap:5px}
+.anniversary-hero-title,.anniversary-week-title,.anniversary-record-title{min-width:0;display:flex;align-items:baseline;flex-wrap:wrap;column-gap:10px;row-gap:1px}
+.anniversary-hero-title strong,.anniversary-week-title strong,.anniversary-record-title strong{min-width:0;max-width:100%;overflow:hidden;color:#263440;font-size:17px;font-weight:650;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.anniversary-hero-title strong{font-size:18px}
+.anniversary-event-label{flex:none;color:#a65b28;font-size:14px;font-weight:550;line-height:1.35;white-space:nowrap}
+.anniversary-hero-date,.anniversary-week-date,.anniversary-record-date{min-width:0;display:flex;align-items:center;gap:7px;color:#77736d;font-size:12px;font-weight:400;line-height:1.4}
+.anniversary-hero-date svg,.anniversary-week-date svg,.anniversary-record-date svg{width:15px;height:15px;flex:none;color:#8a8984}
+.anniversary-countdown{min-width:0;display:inline-flex;align-items:baseline;justify-content:center;gap:3px;padding:8px 10px;border-radius:12px;background:#fff3f0;color:#bc3036;font-size:11px;font-weight:500;line-height:1.2;white-space:nowrap}
+.anniversary-countdown small{font-size:10px;font-weight:450}
+.anniversary-countdown strong{font-size:17px;font-weight:650;letter-spacing:-.025em}
+.anniversary-countdown-featured{min-width:76px;min-height:76px;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:8px 10px;border-radius:17px;background:#fff8f5}
+.anniversary-countdown-featured small{font-size:11px}
+.anniversary-countdown-featured strong{font-size:27px;line-height:1.1}
+.anniversary-upcoming-week{margin-top:24px;padding:0}
+.anniversary-upcoming-week>header{display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:9px;margin-bottom:9px}
+.anniversary-upcoming-week h2{margin:0;color:#263440;font-size:18px;font-weight:650;letter-spacing:-.035em;white-space:nowrap}
+.anniversary-section-count,.anniversary-list>header>div>span{min-width:24px;padding:4px 8px;border-radius:999px;background:#f7f0e8;color:#956344;text-align:center;font-size:11px;font-weight:550}
+.anniversary-week-range{justify-self:end;color:#89847f;font-size:11px;white-space:nowrap}
+.anniversary-upcoming-week>div,.anniversary-list>div{display:grid;gap:0;overflow:hidden;border:1px solid #f0ece6;border-radius:17px;background:#fffefa}
+.anniversary-week-event{grid-template-columns:40px minmax(0,1fr) auto 12px;align-items:center;gap:9px;min-height:68px;padding:10px 12px;border-bottom:1px solid #f0ece6;background:transparent}
+.anniversary-week-event:last-child,.anniversary-record:last-child{border-bottom:0}
+.anniversary-week-event .anniversary-item-icon,.anniversary-record .anniversary-item-icon{width:38px;height:38px}
+.anniversary-week-event .anniversary-item-icon svg,.anniversary-record .anniversary-item-icon svg{width:21px;height:21px}
+.anniversary-week-title{column-gap:9px}
+.anniversary-week-copy .anniversary-week-title strong,.anniversary-record-copy .anniversary-record-title strong{font-size:15px}
+.anniversary-week-title .anniversary-event-label,.anniversary-record-title .anniversary-event-label{font-size:14px}
+.anniversary-week-date,.anniversary-record-date{font-size:12px}
+.anniversary-week-event .anniversary-countdown{padding:8px 9px}
+.anniversary-week-event .anniversary-countdown strong,.anniversary-record .anniversary-countdown strong{font-size:16px}
+.anniversary-week-event .anniversary-record-arrow,.anniversary-record-arrow{width:15px;height:15px;color:#85817c}
+.anniversary-list{margin-top:25px}
+.anniversary-list>header{margin-bottom:9px}
+.anniversary-list h2{color:#263440;font-size:18px;font-weight:650}
+.anniversary-list>header>div{gap:10px}
+.anniversary-record{display:grid;grid-template-columns:40px minmax(0,1fr) auto 12px;align-items:center;gap:9px;min-height:66px;padding:10px 12px;border:0;border-bottom:1px solid #f0ece6;border-radius:0;background:transparent;transition:background .18s ease}
+.anniversary-record:hover{border-color:#f0ece6;background:#fffaf7}
+.anniversary-record-copy{gap:4px}
+.anniversary-record-title strong{font-size:15px}
+.anniversary-record-date{font-size:12px}
+.anniversary-record .anniversary-countdown{padding:8px 9px}
+.anniversary-list-empty{border:0;background:transparent}
+.anniversary-detail-card>h2{margin:0 0 4px;font-size:25px}
+.anniversary-detail-date{font-size:12px}
+.anniversary-detail-status{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;margin-top:17px;padding:13px 14px;border:1px solid #f0e6db;background:#fbf6ef}
+.anniversary-detail-event{min-width:0;display:grid;gap:3px}
+.anniversary-detail-event>strong{color:#a45c2d;font-size:15px;font-weight:650;line-height:1.35}
+.anniversary-detail-event>small{color:#827970;font-size:12px;line-height:1.4}
+.anniversary-detail-status>.anniversary-countdown{justify-self:end}
+.anniversary-detail-status>.anniversary-countdown:not(:has(strong)){padding:0;background:transparent;font-size:12px;color:#927451}
+.anniversary-milestone-summary{gap:9px;margin-top:14px;padding:13px 14px}
+.anniversary-milestone-summary h3{font-size:12px}
+.anniversary-milestone-summary>strong{font-size:14px}
+.anniversary-milestone-next{margin:0;padding:0;border:0;background:transparent}
+.anniversary-milestone-next .anniversary-detail-event>strong{font-size:14px}
+.anniversary-milestone-summary>.anniversary-detail-status{font-size:12px}
+.anniversary-detail-card footer{margin-top:18px}
+@media(max-width:700px){
+  .anniversary-page{padding:24px 20px calc(58px + var(--safe-bottom))}
+  .anniversary-home-head,.anniversary-subhead{margin-bottom:16px}
+  .anniversary-home-head h1{font-size:30px}
+  .anniversary-hero{gap:9px;border-radius:18px}
+  .anniversary-hero-main{grid-template-columns:44px minmax(0,1fr) auto;gap:9px}
+  .anniversary-hero .anniversary-item-icon{width:44px;height:44px}
+  .anniversary-countdown-featured{min-width:68px;min-height:68px}
+  .anniversary-upcoming-week{margin-top:21px}
+  .anniversary-upcoming-week>header{gap:7px}
+  .anniversary-upcoming-week h2,.anniversary-list h2{font-size:16px}
+  .anniversary-week-range{font-size:10px}
+  .anniversary-week-event{grid-template-columns:36px minmax(0,1fr) auto 11px;gap:7px;min-height:64px;padding:9px 9px}
+  .anniversary-week-event .anniversary-item-icon,.anniversary-record .anniversary-item-icon{width:36px;height:36px}
+  .anniversary-week-event .anniversary-countdown,.anniversary-record .anniversary-countdown{gap:2px;padding:7px 7px;font-size:10px}
+  .anniversary-week-event .anniversary-countdown strong,.anniversary-record .anniversary-countdown strong{font-size:15px}
+  .anniversary-record{grid-template-columns:36px minmax(0,1fr) auto 11px;gap:7px;min-height:62px;padding:9px}
+  .anniversary-week-copy .anniversary-week-title strong,.anniversary-record-copy .anniversary-record-title strong{font-size:14px}
+  .anniversary-week-title .anniversary-event-label,.anniversary-record-title .anniversary-event-label{font-size:13px}
+  .anniversary-hero-title strong{font-size:16px}
+  .anniversary-event-label{font-size:13px}
+  .anniversary-detail-card>h2{font-size:23px}
+}
+@media(max-width:360px){
+  .anniversary-page{padding-left:14px;padding-right:14px}
+  .anniversary-hero{padding:13px 12px}
+  .anniversary-hero-main{grid-template-columns:38px minmax(0,1fr) auto;gap:7px}
+  .anniversary-hero .anniversary-item-icon{width:38px;height:38px}
+  .anniversary-hero .anniversary-item-icon svg{width:20px;height:20px}
+  .anniversary-countdown-featured{min-width:61px;min-height:62px;padding:6px}
+  .anniversary-countdown-featured strong{font-size:23px}
+  .anniversary-hero-title{column-gap:6px}
+  .anniversary-hero-title strong{font-size:15px}
+  .anniversary-hero-title .anniversary-event-label{font-size:12px}
+  .anniversary-week-range{font-size:9px}
+  .anniversary-week-event{grid-template-columns:32px minmax(0,1fr) auto 10px;gap:6px;padding:8px 7px}
+  .anniversary-week-event .anniversary-item-icon,.anniversary-record .anniversary-item-icon{width:32px;height:32px}
+  .anniversary-week-event .anniversary-item-icon svg,.anniversary-record .anniversary-item-icon svg{width:18px;height:18px}
+  .anniversary-week-event .anniversary-countdown,.anniversary-record .anniversary-countdown{padding:6px 5px;font-size:9px}
+  .anniversary-week-event .anniversary-countdown strong,.anniversary-record .anniversary-countdown strong{font-size:14px}
+  .anniversary-week-title,.anniversary-record-title{column-gap:6px}
+  .anniversary-week-copy .anniversary-week-title strong,.anniversary-record-copy .anniversary-record-title strong{font-size:13px}
+  .anniversary-week-title .anniversary-event-label,.anniversary-record-title .anniversary-event-label{font-size:12px}
+  .anniversary-week-date,.anniversary-record-date{font-size:11px}
+}

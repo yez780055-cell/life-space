@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { NavigationSnapshot } from '../../app/navigation/model';
 import { Icon } from '../../shared/ui/icons';
-import { calendarDayDifference, formatDateKey, isValidDateKey, localTodayKey, millisecondsToNextLocalMidnight } from './domain/date';
-import { anniversaryNumberLabel, occurrenceFor, selectAnniversaryUpcomingWeek, sortAnniversaries } from './domain/anniversary';
+import { addCalendarDays, calendarDayDifference, formatDateKey, isValidDateKey, localTodayKey, millisecondsToNextLocalMidnight } from './domain/date';
+import { anniversaryNumberLabel, occurrenceFor, selectAnniversaryUpcomingWeek, sortAnniversaries, type AnniversaryUpcomingEvent } from './domain/anniversary';
 import { MAX_MILESTONE_DAY, maximumMilestoneDay, nextMilestone, normalizeMilestoneDays } from './domain/milestones';
 import { createAnniversary, deleteAnniversary, listAnniversaries, updateAnniversary } from './data/repository';
 import type { AnniversaryDraft, AnniversaryRecord } from './types';
@@ -41,19 +41,35 @@ function useLocalToday(active: boolean): string {
   return today;
 }
 
-function TypeLabel({ recurrence }: { recurrence: AnniversaryRecord['recurrence'] }) {
-  return <span className="anniversary-type">{recurrence === 'yearly' ? '每年' : '一次'}</span>;
-}
-
 function eventCountdown(date: string, today: string): string {
   const days = calendarDayDifference(today, date);
   return days === 0 ? '就是今天' : `还有 ${days} 天`;
 }
 
+function eventDisplayLabel(event: AnniversaryUpcomingEvent): string {
+  const labels = [
+    ...(event.kinds.includes('yearly') && event.anniversaryNumber !== undefined ? [anniversaryNumberLabel(event.anniversaryNumber)] : []),
+    ...(event.kinds.includes('once') ? ['一次'] : []),
+    ...(event.kinds.includes('milestone') && event.milestoneDay !== undefined ? [`第 ${event.milestoneDay} 天`] : [])
+  ].filter((label): label is string => label !== null);
+  return labels.join(' · ') || event.label;
+}
+
+function Countdown({ value, featured = false }: { value: string; featured?: boolean }) {
+  const match = /^(还有|已过去)\s*(\d+)\s*天$/.exec(value);
+  return <span className={`anniversary-countdown${featured ? ' anniversary-countdown-featured' : ''}`}>
+    {match ? <><small>{match[1]}</small><strong>{match[2]}</strong><small>天</small></> : value}
+  </span>;
+}
+
 function RecordCard({ item, onOpen }: { item: ReturnType<typeof sortAnniversaries>[number]; onOpen: () => void }) {
+  const eventLabel = item.record.recurrence === 'yearly' ? anniversaryNumberLabel(item.anniversaryNumber) ?? '纪念日' : '一次';
   return <button className="anniversary-record" onClick={onOpen} aria-label={`查看纪念日：${item.record.title}`}>
-    <span className="anniversary-record-copy"><strong>{item.record.title}</strong><span>{formatDateKey(item.record.date)} <TypeLabel recurrence={item.record.recurrence}/></span></span>
-    <span className="anniversary-record-status">{item.status}</span>
+    <span className="anniversary-item-icon"><Icon name="anniversary"/></span>
+    <span className="anniversary-record-copy"><span className="anniversary-record-title"><strong>{item.record.title}</strong><span className="anniversary-event-label">{eventLabel}</span></span>
+      {item.record.recurrence === 'once' && <span className="anniversary-record-date"><Icon name="calendar"/>{formatDateKey(item.record.date)}</span>}
+    </span>
+    <Countdown value={item.status}/>
     <Icon name="arrow" className="anniversary-record-arrow"/>
   </button>;
 }
@@ -183,17 +199,29 @@ export function AnniversaryModule({ snapshot, active, onScreen, onSurface, onBac
   if (snapshot.anniversaryScreen === 'editor') {
     view = <AnniversaryForm key={`editor-${snapshot.anniversaryRecordId ?? 'new'}-${current?.createdAt ?? (snapshot.anniversaryRecordId ? 'loading' : 'new')}`} record={current} today={today} saving={saving} onCancel={onBack} onSave={(draft) => void save(draft)}/>;
   } else if (snapshot.anniversaryScreen === 'detail') {
+    const detailEventLabel = current?.recurrence === 'yearly' ? anniversaryNumberLabel(occurrence?.anniversaryNumber ?? null) ?? '纪念日' : '一次';
+    const detailEventDate = current?.recurrence === 'yearly' ? occurrence?.nextDate : current?.date;
     view = current && occurrence ? <section className="anniversary-page" aria-label="纪念日详情">
       <header className="anniversary-subhead"><button className="icon-button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><div><p className="anniversary-eyebrow">ANNIVERSARY</p><h1>纪念日详情</h1></div></header>
-      <article className="anniversary-detail-card"><TypeLabel recurrence={current.recurrence}/><h2>{current.title}</h2><p className="anniversary-detail-date">{formatDateKey(current.date)}</p><div className="anniversary-detail-status"><strong>{occurrence.status}</strong>{current.recurrence === 'yearly' && occurrence.anniversaryNumber !== null && <span>{anniversaryNumberLabel(occurrence.anniversaryNumber)}</span>}{current.recurrence === 'yearly' && occurrence.nextDate && <span>下一次：{formatDateKey(occurrence.nextDate)}</span>}</div>{current.recurrence === 'once' && occurrence.daysPast !== null && <p className="anniversary-detail-past">这件事已过去 {occurrence.daysPast} 天。</p>}{milestone && <section className="anniversary-milestone-summary" aria-label="天数纪念"><h3>天数纪念</h3>{milestone.currentDay === null ? <strong>纪念日尚未开始</strong> : <strong>相伴第 {milestone.currentDay} 天</strong>}{milestone.nextMilestoneDay !== null && milestone.nextMilestoneDate && <><p>{milestone.isMilestoneToday ? `${milestone.nextMilestoneDay} 天 · 就是今天` : `下一节点 ${milestone.nextMilestoneDay} 天 · 还有 ${milestone.daysUntilNextMilestone} 天`}</p><p>{milestone.nextMilestoneDay} 天：{formatDateKey(milestone.nextMilestoneDate)}</p></>}{milestone.allCompleted && <p>已完成全部天数节点</p>}{!current.milestoneDays.length && <p>还没有设置天数节点</p>}</section>}{current.note && <div className="anniversary-note"><span>备注</span><p>{current.note}</p></div>}<footer><button className="anniversary-secondary" onClick={() => onScreen('editor', current.id)}>编辑</button><button className="anniversary-danger" onClick={() => onSurface('anniversary-delete')}>删除</button></footer></article>
+      <article className="anniversary-detail-card"><h2>{current.title}</h2><p className="anniversary-detail-date">{current.recurrence === 'yearly' ? '每年' : '一次'} · {formatDateKey(current.date)}</p>
+        <div className="anniversary-detail-status"><span className="anniversary-detail-event"><strong>{detailEventLabel}</strong>{detailEventDate && <small>{formatDateKey(detailEventDate)}</small>}</span><Countdown value={occurrence.status}/></div>
+        {current.recurrence === 'once' && occurrence.daysPast !== null && <p className="anniversary-detail-past">这件事已过去 {occurrence.daysPast} 天。</p>}
+        {milestone && <section className="anniversary-milestone-summary" aria-label="天数纪念"><h3>天数纪念</h3>{milestone.currentDay === null ? <strong>纪念日尚未开始</strong> : <strong>相伴第 {milestone.currentDay} 天</strong>}{milestone.nextMilestoneDay !== null && milestone.nextMilestoneDate && <div className="anniversary-detail-status anniversary-milestone-next"><span className="anniversary-detail-event"><strong>第 {milestone.nextMilestoneDay} 天</strong><small>{formatDateKey(milestone.nextMilestoneDate)}</small></span><Countdown value={milestone.isMilestoneToday ? '就是今天' : `还有 ${milestone.daysUntilNextMilestone} 天`}/></div>}{milestone.allCompleted && <p>已完成全部天数节点</p>}{!current.milestoneDays.length && <p>还没有设置天数节点</p>}</section>}
+        {current.note && <div className="anniversary-note"><span>备注</span><p>{current.note}</p></div>}<footer><button className="anniversary-secondary" onClick={() => onScreen('editor', current.id)}>编辑</button><button className="anniversary-danger" onClick={() => onSurface('anniversary-delete')}>删除</button></footer></article>
     </section> : <section className="anniversary-page" aria-label="纪念日详情"><header className="anniversary-subhead"><button className="icon-button" onClick={onBack} aria-label="返回"><Icon name="arrow"/></button><h1>纪念日详情</h1></header><div className="anniversary-empty"><h2>找不到这条纪念日</h2><button className="anniversary-secondary" onClick={onReturnHome}>回到列表</button></div></section>;
   } else {
     view = <section className="anniversary-page anniversary-home" aria-label="纪念日">
-      <header className="anniversary-home-head"><div><p className="anniversary-eyebrow">ANNIVERSARY</p><h1>纪念日</h1></div><button className="anniversary-create" onClick={() => onScreen('editor')} aria-label="新建纪念日"><Icon name="plus"/><span>添加</span></button></header>
+      <header className="anniversary-home-head"><div><h1>纪念日</h1></div><button className="anniversary-create" onClick={() => onScreen('editor')} aria-label="新建纪念日"><Icon name="plus"/><span>添加</span></button></header>
       {loading ? <p className="anniversary-loading" role="status">正在读取本地纪念日…</p> : <>
         {upcomingWeek.anchor ? <>
-          <button className="anniversary-hero" onClick={() => onScreen('detail', upcomingWeek.anchor!.recordId)} aria-label={`查看最近纪念日：${upcomingWeek.anchor.title}`}><span className="anniversary-hero-top"><span>下一件值得期待的事</span><Icon name="calendar"/></span><strong>{upcomingWeek.anchor.title}</strong><span className="anniversary-hero-kind">{upcomingWeek.anchor.label}</span><span className="anniversary-hero-date">{formatDateKey(upcomingWeek.anchor.date)}</span><span className="anniversary-hero-bottom"><span>{eventCountdown(upcomingWeek.anchor.date, today)}</span></span></button>
-          {upcomingWeek.weekEvents.length > 0 && <section className="anniversary-upcoming-week" aria-label="接下来这一周"><h2>接下来这一周</h2><div>{upcomingWeek.weekEvents.map((event) => <button key={event.id} className="anniversary-week-event" onClick={() => onScreen('detail', event.recordId)} aria-label={`查看期待事项：${event.title}，${event.label}`}><span className="anniversary-week-date">{formatDateKey(event.date, { month: 'numeric', day: 'numeric' })}</span><span className="anniversary-week-copy"><strong>{event.title}</strong><span>{event.label}</span></span><span className="anniversary-week-countdown">{eventCountdown(event.date, today)}</span></button>)}</div></section>}
+          <button className="anniversary-hero" onClick={() => onScreen('detail', upcomingWeek.anchor!.recordId)} aria-label={`查看最近纪念日：${upcomingWeek.anchor.title}`}>
+            <span className="anniversary-hero-top"><span>下一件值得期待的事</span></span>
+            <span className="anniversary-hero-main"><span className="anniversary-item-icon"><Icon name="anniversary"/></span><span className="anniversary-hero-copy"><span className="anniversary-hero-title"><strong>{upcomingWeek.anchor.title}</strong><span className="anniversary-event-label">{eventDisplayLabel(upcomingWeek.anchor)}</span></span><span className="anniversary-hero-date"><Icon name="calendar"/>{formatDateKey(upcomingWeek.anchor.date)}</span></span><Countdown value={eventCountdown(upcomingWeek.anchor.date, today)} featured/></span>
+          </button>
+          {upcomingWeek.weekEvents.length > 0 && <section className="anniversary-upcoming-week" aria-label="接下来这一周"><header><h2>接下来这一周</h2><span className="anniversary-section-count">{upcomingWeek.weekEvents.length}</span><span className="anniversary-week-range">{formatDateKey(upcomingWeek.anchor.date, { month: 'long', day: 'numeric' })} - {formatDateKey(addCalendarDays(upcomingWeek.anchor.date, 6), { month: 'long', day: 'numeric' })}</span></header><div>{upcomingWeek.weekEvents.map((event) => <button key={event.id} className="anniversary-week-event" onClick={() => onScreen('detail', event.recordId)} aria-label={`查看期待事项：${event.title}，${eventDisplayLabel(event)}`}>
+            <span className="anniversary-item-icon"><Icon name="anniversary"/></span><span className="anniversary-week-copy"><span className="anniversary-week-title"><strong>{event.title}</strong><span className="anniversary-event-label">{eventDisplayLabel(event)}</span></span>
+              {event.kinds.includes('milestone') || event.kinds.includes('once') ? <span className="anniversary-week-date"><Icon name="calendar"/>{formatDateKey(event.date)}</span> : null}</span><Countdown value={eventCountdown(event.date, today)}/><Icon name="arrow" className="anniversary-record-arrow"/>
+          </button>)}</div></section>}
         </> : <div className="anniversary-empty"><span className="anniversary-empty-mark"><Icon name="calendar"/></span><h2>{records.length ? '暂无未来纪念日' : '还没有纪念日'}</h2><p>{records.length ? '已过去的一次性日期仍会保留在下面。' : '先留下一件对你有意义的日子。'}</p><button className="anniversary-primary" onClick={() => onScreen('editor')}>创建纪念日</button></div>}
         <section className="anniversary-list" aria-label="全部纪念日"><header><div><h2>全部纪念日</h2><span>{records.length}</span></div></header>{sorted.length ? <div>{sorted.map((item) => <RecordCard key={item.record.id} item={item} onOpen={() => onScreen('detail', item.record.id)}/>)}</div> : <p className="anniversary-list-empty">创建后会显示在这里。</p>}</section>
       </>}
