@@ -4,7 +4,7 @@ import { anniversaryNumberLabel, buildUpcomingEvents, nextYearlyDate, occurrence
 import { addCalendarDays } from './date';
 
 function record(id: string, date: string, recurrence: 'yearly' | 'once', createdAt = `2026-01-0${id.length}T00:00:00.000Z`): AnniversaryRecord {
-  return { id, title: id, date, recurrence, milestoneEnabled: false, milestoneDays: [], createdAt, updatedAt: createdAt };
+  return { id, title: id, icon: 'heart', date, recurrence, milestoneEnabled: false, milestoneDays: [], createdAt, updatedAt: createdAt };
 }
 
 describe('yearly anniversary occurrences', () => {
@@ -64,7 +64,7 @@ describe('unified upcoming Anniversary events', () => {
       { ...record('once-future', '2026-10-20', 'once'), title: '未来一次' },
       { ...record('once-past', '2026-10-16', 'once'), title: '过去一次' },
       { ...record('off', milestoneStart, 'once'), milestoneEnabled: false, milestoneDays: [10, 11, 12] },
-      { ...record('milestones', milestoneStart, 'once'), milestoneEnabled: true, milestoneDays: [5, 11, 12, 20] }
+      { ...record('milestones', milestoneStart, 'once'), icon: 'flower' as const, milestoneEnabled: true, milestoneDays: [5, 11, 12, 20] }
     ];
     const events = buildUpcomingEvents(records, today);
     expect(events.map((event) => [event.title, event.date, event.kind, event.milestoneDay])).toEqual([
@@ -76,6 +76,7 @@ describe('unified upcoming Anniversary events', () => {
       ['年度', '2026-11-02', 'yearly', undefined]
     ]);
     expect(events.find((event) => event.recordId === 'milestones')?.label).toContain('第 11 天');
+    expect(events.filter((event) => event.recordId === 'milestones').every((event) => event.icon === 'flower')).toBe(true);
     expect(events.some((event) => event.recordId === 'off')).toBe(false);
     expect(events.some((event) => event.recordId === 'once-past')).toBe(false);
   });
@@ -123,9 +124,9 @@ describe('unified upcoming Anniversary events', () => {
   });
 
   it('groups same-record same-date yearly/milestone and once/milestone semantics without losing labels', () => {
-    const yearlyAndMilestone = { ...record('same-year', '2024-01-01', 'yearly'), milestoneEnabled: true, milestoneDays: [732] };
+    const yearlyAndMilestone = { ...record('same-year', '2024-01-01', 'yearly'), icon: 'ring' as const, milestoneEnabled: true, milestoneDays: [732] };
     const mergedYearly = buildUpcomingEvents([yearlyAndMilestone], '2025-12-31').find((event) => event.date === '2026-01-01');
-    expect(mergedYearly).toMatchObject({ kind: 'yearly', kinds: ['yearly', 'milestone'], anniversaryNumber: 2, milestoneDay: 732, label: '第 2 周年 · 天数节点 · 第 732 天' });
+    expect(mergedYearly).toMatchObject({ icon: 'ring', kind: 'yearly', kinds: ['yearly', 'milestone'], anniversaryNumber: 2, milestoneDay: 732, label: '第 2 周年 · 天数节点 · 第 732 天' });
     const onceAndMilestone = { ...record('same-once', '2026-11-01', 'once'), milestoneEnabled: true, milestoneDays: [1] };
     const mergedOnce = buildUpcomingEvents([onceAndMilestone], '2026-10-17').find((event) => event.date === '2026-11-01');
     expect(mergedOnce).toMatchObject({ kind: 'once', kinds: ['once', 'milestone'], milestoneDay: 1, label: '一次性纪念 · 天数节点 · 第 1 天' });

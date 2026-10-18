@@ -86,11 +86,12 @@ async function readAnniversaryRecords(page) {
   });
 }
 
-async function createBrowserAnniversary(page, { title, date, recurrence = 'yearly', milestoneDays = [] }) {
+async function createBrowserAnniversary(page, { title, date, recurrence = 'yearly', milestoneDays = [], icon = '爱心' }) {
   await page.getByRole('button', { name: '新建纪念日' }).click();
   await page.getByLabel('名称').fill(title);
-  await page.getByLabel('日期', { exact: true }).fill(date);
+  await page.getByRole('textbox', { name: '日期', exact: true }).fill(date);
   if (recurrence === 'once') await page.getByRole('radio', { name: /仅一次/ }).check();
+  if (icon !== '爱心') await page.getByRole('radio', { name: `选择图标：${icon}` }).click();
   if (milestoneDays.length) {
     await page.getByRole('checkbox', { name: '天数纪念' }).check();
     for (const day of milestoneDays) {
@@ -748,8 +749,17 @@ try {
   const foundationBeforeAnniversary = JSON.stringify(await readOtherFoundationStores(page));
   await page.getByRole('button', { name: '新建纪念日' }).click();
   await page.getByLabel('名称').fill('浏览器年度纪念日');
-  await page.getByLabel('日期', { exact: true }).fill('2024-02-29');
+  await page.getByRole('textbox', { name: '日期', exact: true }).fill('2024-02-29');
   await page.getByLabel('备注').fill('合成数据：周年测试');
+  const starPicker = page.getByRole('radio', { name: '选择图标：星星' });
+  await starPicker.focus();
+  await page.keyboard.press('Space');
+  if (await starPicker.getAttribute('aria-checked') !== 'true') throw new Error('Anniversary icon selection did not respond to Space');
+  await page.keyboard.press('Tab');
+  if (await page.evaluate(() => document.activeElement?.getAttribute('aria-label')) !== '选择图标：闪光') throw new Error('Anniversary icon picker is not reachable in Tab order');
+  await page.keyboard.press('Enter');
+  if (await page.getByRole('radio', { name: '选择图标：闪光' }).getAttribute('aria-checked') !== 'true') throw new Error('Anniversary icon selection did not respond to Enter');
+  await starPicker.click();
   const yearlyDayToggle = page.getByRole('checkbox', { name: '天数纪念' });
   if (await yearlyDayToggle.isChecked()) throw new Error('New Anniversary records should default day milestones off');
   await yearlyDayToggle.check();
@@ -768,7 +778,8 @@ try {
   await page.getByRole('button', { name: '查看最近纪念日：浏览器年度纪念日' }).click();
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
   const yearlyBeforeEdit = (await readAnniversaryRecords(page)).find((record) => record.title === '浏览器年度纪念日');
-  if (!yearlyBeforeEdit || yearlyBeforeEdit.date !== '2024-02-29' || yearlyBeforeEdit.recurrence !== 'yearly' || !yearlyBeforeEdit.milestoneEnabled || JSON.stringify(yearlyBeforeEdit.milestoneDays) !== JSON.stringify(expectedMilestoneDays)) throw new Error(`Anniversary yearly record or its custom milestones did not persist correctly: ${JSON.stringify(yearlyBeforeEdit)}`);
+  if (!yearlyBeforeEdit || yearlyBeforeEdit.date !== '2024-02-29' || yearlyBeforeEdit.recurrence !== 'yearly' || yearlyBeforeEdit.icon !== 'star' || !yearlyBeforeEdit.milestoneEnabled || JSON.stringify(yearlyBeforeEdit.milestoneDays) !== JSON.stringify(expectedMilestoneDays)) throw new Error(`Anniversary yearly record, icon, or its custom milestones did not persist correctly: ${JSON.stringify(yearlyBeforeEdit)}`);
+  if (await page.locator('.anniversary-detail-icon [aria-label="星星"]').count() !== 1) throw new Error('Anniversary detail did not show the record icon');
   const nextMilestoneDay = expectedMilestoneDays.find((day) => day >= anniversaryCurrentDay);
   const milestoneSummary = await page.getByRole('region', { name: '天数纪念' }).innerText();
   if (!milestoneSummary.includes(`相伴第 ${anniversaryCurrentDay} 天`)) throw new Error(`Anniversary current day count is incorrect: ${milestoneSummary}`);
@@ -780,12 +791,13 @@ try {
   await shot(page, 'anniversary-desktop-detail.png');
   await page.getByRole('button', { name: '编辑' }).click();
   await page.getByLabel('名称').fill('更新后的年度纪念日');
+  await page.getByRole('radio', { name: '选择图标：花' }).click();
   await page.getByRole('button', { name: '删除 520 天节点' }).click();
   await page.getByRole('button', { name: '保存' }).click();
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
   const yearlyAfterEdit = (await readAnniversaryRecords(page)).find((record) => record.title === '更新后的年度纪念日');
   const editedMilestoneDays = expectedMilestoneDays.filter((day) => day !== 520);
-  if (!yearlyAfterEdit || yearlyAfterEdit.id !== yearlyBeforeEdit.id || yearlyAfterEdit.createdAt !== yearlyBeforeEdit.createdAt || JSON.stringify(yearlyAfterEdit.milestoneDays) !== JSON.stringify(editedMilestoneDays)) throw new Error('Anniversary edit changed the stable ID/time or did not remove the selected milestone');
+  if (!yearlyAfterEdit || yearlyAfterEdit.id !== yearlyBeforeEdit.id || yearlyAfterEdit.createdAt !== yearlyBeforeEdit.createdAt || yearlyAfterEdit.icon !== 'flower' || JSON.stringify(yearlyAfterEdit.milestoneDays) !== JSON.stringify(editedMilestoneDays)) throw new Error('Anniversary edit changed stable data, failed to save the icon, or did not remove the selected milestone');
   await page.getByRole('button', { name: '编辑' }).click();
   await page.getByRole('checkbox', { name: '天数纪念' }).uncheck();
   await page.getByRole('button', { name: '保存' }).click();
@@ -805,11 +817,12 @@ try {
   await desktopNav.getByRole('button', { name: '纪念日' }).click();
   await page.getByRole('button', { name: '查看最近纪念日：更新后的年度纪念日' }).click();
   await page.getByRole('heading', { name: '纪念日详情' }).waitFor();
+  if (await page.locator('.anniversary-detail-icon [aria-label="花"]').count() !== 1) throw new Error('The selected Anniversary icon did not persist after a page refresh');
   if (!await page.getByRole('region', { name: '天数纪念' }).innerText().then((text) => text.includes(`相伴第 ${anniversaryCurrentDay} 天`))) throw new Error('Anniversary milestones did not survive a page refresh');
   await page.getByRole('button', { name: '返回' }).click();
   await page.getByRole('button', { name: '新建纪念日' }).click();
   await page.getByLabel('名称').fill('浏览器一次性日期');
-  await page.getByLabel('日期', { exact: true }).fill('2099-01-01');
+  await page.getByRole('textbox', { name: '日期', exact: true }).fill('2099-01-01');
   await page.getByRole('radio', { name: /仅一次/ }).check();
   await page.getByRole('checkbox', { name: '天数纪念' }).check();
   for (const day of [1, 500]) {
@@ -826,14 +839,15 @@ try {
   await page.getByRole('button', { name: '返回' }).click();
   const expectationToday = anniversaryTodayKey;
   const expectationRecords = [
-    { title: '期待周天数节点', date: addCalendarDateDays(expectationToday, -100), milestoneDays: [102, 104] },
-    { title: '期待周周年事项', date: addCalendarDateDays(expectationToday, 3) },
-    { title: '期待周单次事项', date: addCalendarDateDays(expectationToday, 6), recurrence: 'once' },
+    { title: '期待周天数节点', date: addCalendarDateDays(expectationToday, -100), milestoneDays: [102, 104], icon: '花' },
+    { title: '期待周周年事项', date: addCalendarDateDays(expectationToday, 3), icon: '星星' },
+    { title: '期待周单次事项', date: addCalendarDateDays(expectationToday, 6), recurrence: 'once', icon: '礼物' },
     { title: '期待周窗口外', date: addCalendarDateDays(expectationToday, 8), recurrence: 'once' }
   ];
   for (const event of expectationRecords) await createBrowserAnniversary(page, event);
   const expectationHero = page.getByRole('button', { name: '查看最近纪念日：期待周天数节点' });
   await expectationHero.waitFor();
+  if (await expectationHero.locator('[aria-label="花"]').count() !== 1) throw new Error('The Anniversary Hero did not use its record icon');
   const expectationHeroText = await expectationHero.innerText();
   const expectationHeroCountdown = (await expectationHero.locator('.anniversary-countdown').innerText()).replace(/\s+/g, '');
   if (await expectationHero.locator('.anniversary-event-label').innerText() !== '第 102 天' || !expectationHeroText.includes(formatDateKeyForBrowser(addCalendarDateDays(expectationToday, 1))) || !expectationHeroCountdown.includes('还有1天')) throw new Error(`The nearest future milestone was not shown as the Anniversary Hero: ${expectationHeroText}`);
@@ -845,16 +859,19 @@ try {
   if (await expectationWeek.getByRole('button').count() !== 3) throw new Error('The anchor week should contain its second milestone, same-day yearly event, and sixth-day once event');
   const sameDayMilestone = expectationWeek.getByRole('button', { name: '查看期待事项：期待周天数节点，第 104 天' });
   const sameDayYearly = expectationWeek.getByRole('button', { name: '查看期待事项：期待周周年事项，首次纪念日' });
+  if (await expectationWeek.getByRole('button', { name: '查看期待事项：期待周天数节点，第 104 天' }).locator('[aria-label="花"]').count() !== 1 || await sameDayYearly.locator('[aria-label="星星"]').count() !== 1 || await expectationWeek.getByRole('button', { name: '查看期待事项：期待周单次事项，一次' }).locator('[aria-label="礼物"]').count() !== 1) throw new Error('Anniversary anchor week events did not inherit their record icons');
   const expectedSharedDate = formatDateKeyForBrowser(addCalendarDateDays(expectationToday, 3));
   if (await sameDayMilestone.locator('.anniversary-week-date').innerText() !== expectedSharedDate) throw new Error('The milestone row did not show its node date');
   if (await sameDayYearly.locator('.anniversary-week-date').count() !== 0) throw new Error('The yearly event row should hide its date without leaving an empty date element');
   const onceWeekEvent = expectationWeek.getByRole('button', { name: '查看期待事项：期待周单次事项，一次' });
   if (await onceWeekEvent.locator('.anniversary-week-date').innerText() !== formatDateKeyForBrowser(addCalendarDateDays(expectationToday, 6))) throw new Error('The once-only event row did not show its date');
   const allAnniversaryRecords = page.getByRole('region', { name: '全部纪念日' });
+  if (await allAnniversaryRecords.getByRole('button', { name: '查看纪念日：期待周周年事项' }).locator('[aria-label="星星"]').count() !== 1 || await allAnniversaryRecords.getByRole('button', { name: '查看纪念日：期待周单次事项' }).locator('[aria-label="礼物"]').count() !== 1) throw new Error('The all-record list did not show each Anniversary icon');
   if (await allAnniversaryRecords.getByRole('button', { name: '查看纪念日：期待周周年事项' }).locator('.anniversary-record-date').count() !== 0) throw new Error('The yearly all-record row should hide its original date');
   if (await allAnniversaryRecords.getByRole('button', { name: '查看纪念日：期待周单次事项' }).locator('.anniversary-record-date').innerText() !== formatDateKeyForBrowser(addCalendarDateDays(expectationToday, 6))) throw new Error('The once-only all-record row should show its date');
   await expectationWeek.getByRole('button', { name: '查看期待事项：期待周周年事项，首次纪念日' }).click();
   if (await page.locator('.anniversary-detail-card h2').innerText() !== '期待周周年事项') throw new Error('Clicking a week event did not open its AnniversaryRecord detail');
+  if (await page.locator('.anniversary-detail-icon [aria-label="星星"]').count() !== 1) throw new Error('Anniversary event detail lost the record icon');
   await page.getByRole('button', { name: '返回' }).click();
   for (const event of expectationRecords) {
     const recordCard = page.getByRole('button', { name: `查看纪念日：${event.title}` });
@@ -1152,7 +1169,8 @@ try {
   await mobilePage.getByRole('heading', { name: '新建纪念日' }).waitFor();
   const longAnniversaryTitle = '手机长标题验收'.repeat(8);
   await mobilePage.getByLabel('名称').fill(longAnniversaryTitle);
-  await mobilePage.getByLabel('日期', { exact: true }).fill('2099-03-01');
+  await mobilePage.getByRole('textbox', { name: '日期', exact: true }).fill('2099-03-01');
+  await mobilePage.getByRole('radio', { name: '选择图标：相机' }).click();
   await mobilePage.getByLabel('备注').fill('合成备注。'.repeat(80));
   await mobilePage.getByRole('checkbox', { name: '天数纪念' }).check();
   const mobileMilestoneInput = mobilePage.getByRole('spinbutton', { name: '添加天数节点' });
@@ -1178,7 +1196,7 @@ try {
   await mobilePage.getByRole('button', { name: '保存' }).tap();
   await mobilePage.getByRole('button', { name: `查看最近纪念日：${longAnniversaryTitle}` }).waitFor();
   const mobileAnniversaryRecord = (await readAnniversaryRecords(mobilePage)).find((record) => record.title === longAnniversaryTitle);
-  if (!mobileAnniversaryRecord?.milestoneEnabled || JSON.stringify(mobileAnniversaryRecord.milestoneDays) !== JSON.stringify(mobileMilestoneDays)) throw new Error('Mobile day milestone entry did not persist all user-entered nodes');
+  if (mobileAnniversaryRecord?.icon !== 'camera' || !mobileAnniversaryRecord.milestoneEnabled || JSON.stringify(mobileAnniversaryRecord.milestoneDays) !== JSON.stringify(mobileMilestoneDays)) throw new Error('Mobile Anniversary icon or day milestone entry did not persist');
   if (await mobilePage.evaluate(() => document.documentElement.scrollWidth) > 390) throw new Error('Long Anniversary title or note caused horizontal overflow on mobile');
   const mobileExpectationToday = await mobilePage.evaluate(() => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; });
   await createBrowserAnniversary(mobilePage, { title: '手机期待节点', date: addCalendarDateDays(mobileExpectationToday, -100), milestoneDays: [102, 104] });
