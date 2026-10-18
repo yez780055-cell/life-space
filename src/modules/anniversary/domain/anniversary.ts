@@ -1,6 +1,7 @@
 import type { AnniversaryDate, AnniversaryRecord } from '../types';
 import { calendarDayDifference, compareDateKeys, dateKeyFromParts, dateOrdinal, isLeapYear, LAST_SUPPORTED_DATE, parseDateKey, addCalendarDays } from './date';
 import { milestoneDate, normalizeMilestoneDays } from './milestones';
+import type { AnniversaryIconKey } from '../icons';
 
 export interface AnniversaryOccurrence {
   nextDate: AnniversaryDate | null;
@@ -22,6 +23,7 @@ export interface AnniversaryUpcomingEvent {
   createdAt: string;
   date: AnniversaryDate;
   title: string;
+  icon: AnniversaryIconKey;
   kind: AnniversaryUpcomingEventKind;
   kinds: AnniversaryUpcomingEventKind[];
   label: string;
@@ -120,14 +122,14 @@ export function buildUpcomingEvents(records: AnniversaryRecord[], today: Anniver
       if (occurrence.nextDate) {
         candidates.push({
           id: `${record.id}:${occurrence.nextDate}:yearly`, recordId: record.id, createdAt: record.createdAt,
-          date: occurrence.nextDate, title: record.title, kind: 'yearly', kinds: ['yearly'],
+          date: occurrence.nextDate, title: record.title, icon: record.icon, kind: 'yearly', kinds: ['yearly'],
           label: anniversaryNumberLabel(occurrence.anniversaryNumber) ?? '纪念日',
           ...(occurrence.anniversaryNumber !== null ? { anniversaryNumber: occurrence.anniversaryNumber } : {})
         });
       }
     } else if (record.recurrence === 'once') {
       if (compareDateKeys(record.date, today) >= 0) {
-        candidates.push({ id: `${record.id}:${record.date}:once`, recordId: record.id, createdAt: record.createdAt, date: record.date, title: record.title, kind: 'once', kinds: ['once'], label: '一次性纪念' });
+        candidates.push({ id: `${record.id}:${record.date}:once`, recordId: record.id, createdAt: record.createdAt, date: record.date, title: record.title, icon: record.icon, kind: 'once', kinds: ['once'], label: '一次性纪念' });
       }
     } else {
       throw new RangeError('纪念日类型无效');
@@ -137,7 +139,7 @@ export function buildUpcomingEvents(records: AnniversaryRecord[], today: Anniver
     for (const milestoneDay of normalizeMilestoneDays(record.milestoneDays, record.date)) {
       const date = milestoneDate(record.date, milestoneDay);
       if (compareDateKeys(date, today) < 0) continue;
-      candidates.push({ id: `${record.id}:${date}:milestone:${milestoneDay}`, recordId: record.id, createdAt: record.createdAt, date, title: record.title, kind: 'milestone', kinds: ['milestone'], label: `天数节点 · 第 ${milestoneDay} 天`, milestoneDay });
+      candidates.push({ id: `${record.id}:${date}:milestone:${milestoneDay}`, recordId: record.id, createdAt: record.createdAt, date, title: record.title, icon: record.icon, kind: 'milestone', kinds: ['milestone'], label: `天数节点 · 第 ${milestoneDay} 天`, milestoneDay });
     }
   }
 
@@ -162,6 +164,7 @@ export function buildUpcomingEvents(records: AnniversaryRecord[], today: Anniver
       createdAt: primary.createdAt,
       date: primary.date,
       title: primary.title,
+      icon: primary.icon,
       kind: primary.kind,
       kinds,
       label: labels.join(' · '),

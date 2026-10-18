@@ -14,11 +14,11 @@ vi.mock('./data/repository', () => ({
   deleteAnniversary: vi.fn(),
 }));
 
-beforeEach(() => { listAnniversaries.mockResolvedValue([]); });
+beforeEach(() => { vi.clearAllMocks(); listAnniversaries.mockResolvedValue([]); });
 afterEach(cleanup);
 
 function record(date: string, milestoneDays: number[], milestoneEnabled = true): AnniversaryRecord {
-  return { id: 'test-anniversary', title: '合成纪念日', date, recurrence: 'yearly', note: '', milestoneEnabled, milestoneDays, createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' };
+  return { id: 'test-anniversary', title: '合成纪念日', icon: 'heart', date, recurrence: 'yearly', note: '', milestoneEnabled, milestoneDays, createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' };
 }
 
 describe('Anniversary module UI', () => {
@@ -34,16 +34,17 @@ describe('Anniversary module UI', () => {
 
   it('shows the nearest custom milestone as Hero, lists its anchor week, and opens the selected record detail', async () => {
     const today = localTodayKey();
-    const milestoneRecord = { ...record(addCalendarDays(today, -10), [12, 14]), id: 'milestone-home', title: '首页节点主项', createdAt: '2026-01-01T00:00:00.000Z' };
+    const milestoneRecord = { ...record(addCalendarDays(today, -10), [12, 14]), id: 'milestone-home', title: '首页节点主项', icon: 'star' as const, createdAt: '2026-01-01T00:00:00.000Z' };
     const yearlyDate = addCalendarDays(today, 5);
-    const yearlyRecord: AnniversaryRecord = { ...record(yearlyDate, [] , false), id: 'yearly-home', title: '首页周年项', createdAt: '2026-01-02T00:00:00.000Z' };
-    const onceRecord: AnniversaryRecord = { ...record(addCalendarDays(today, 6), [], false), id: 'once-home', recurrence: 'once', title: '第六天事项', createdAt: '2026-01-03T00:00:00.000Z' };
+    const yearlyRecord: AnniversaryRecord = { ...record(yearlyDate, [] , false), id: 'yearly-home', title: '首页周年项', icon: 'plane', createdAt: '2026-01-02T00:00:00.000Z' };
+    const onceRecord: AnniversaryRecord = { ...record(addCalendarDays(today, 6), [], false), id: 'once-home', recurrence: 'once', title: '第六天事项', icon: 'gift', createdAt: '2026-01-03T00:00:00.000Z' };
     const outsideRecord: AnniversaryRecord = { ...record(addCalendarDays(today, 8), [], false), id: 'outside-home', recurrence: 'once', title: '窗口外事项', createdAt: '2026-01-04T00:00:00.000Z' };
     listAnniversaries.mockResolvedValue([outsideRecord, onceRecord, yearlyRecord, milestoneRecord]);
     const onScreen = vi.fn();
     render(<AnniversaryModule snapshot={initialSnapshot('anniversary')} active onScreen={onScreen} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
 
     const hero = await screen.findByRole('button', { name: '查看最近纪念日：首页节点主项' });
+    expect(hero.querySelector('[aria-label="星星"]')).toBeTruthy();
     expect(hero.textContent).not.toContain('天数节点');
     expect(hero.textContent).toContain('第 12 天');
     expect(hero.textContent).toContain(formatDateKey(addCalendarDays(today, 1)));
@@ -61,10 +62,14 @@ describe('Anniversary module UI', () => {
     const milestoneEvent = screen.getByRole('button', { name: '查看期待事项：首页节点主项，第 14 天' });
     const yearlyEvent = screen.getByRole('button', { name: '查看期待事项：首页周年项，首次纪念日' });
     const onceEvent = screen.getByRole('button', { name: '查看期待事项：第六天事项，一次' });
+    expect(milestoneEvent.querySelector('[aria-label="星星"]')).toBeTruthy();
+    expect(yearlyEvent.querySelector('[aria-label="飞机"]')).toBeTruthy();
+    expect(onceEvent.querySelector('[aria-label="礼物"]')).toBeTruthy();
     expect(milestoneEvent.querySelector('.anniversary-week-date')?.textContent).toContain(formatDateKey(addCalendarDays(today, 3)));
     expect(yearlyEvent.querySelector('.anniversary-week-date')).toBeNull();
     expect(onceEvent.querySelector('.anniversary-week-date')?.textContent).toContain(formatDateKey(addCalendarDays(today, 6)));
     const allRecords = screen.getByRole('region', { name: '全部纪念日' });
+    expect(allRecords.querySelector('[aria-label="查看纪念日：首页周年项"] [aria-label="飞机"]')).toBeTruthy();
     expect(allRecords.querySelector('[aria-label="查看纪念日：首页周年项"] .anniversary-record-date')).toBeNull();
     expect(allRecords.querySelector('[aria-label="查看纪念日：第六天事项"] .anniversary-record-date')?.textContent).toContain(formatDateKey(addCalendarDays(today, 6)));
     fireEvent.click(screen.getByRole('button', { name: '查看期待事项：首页周年项，首次纪念日' }));
@@ -101,6 +106,8 @@ describe('Anniversary module UI', () => {
     createAnniversary.mockResolvedValue(record(localTodayKey(), [500, 520, 1000]));
     render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'editor' }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={onBack} onReturnHome={vi.fn()} onError={vi.fn()}/>);
 
+    expect(screen.getByRole('radio', { name: '选择图标：爱心' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('radio', { name: '选择图标：飞机' }));
     const toggle = screen.getByRole('checkbox', { name: '天数纪念' });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     expect(screen.queryByRole('group', { name: '天数节点' })).toBeNull();
@@ -138,30 +145,45 @@ describe('Anniversary module UI', () => {
     fireEvent.click(screen.getByRole('button', { name: '删除 520 天节点' }));
     fireEvent.change(screen.getByRole('textbox', { name: '名称' }), { target: { value: '合成纪念日' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(createAnniversary).toHaveBeenCalledWith(expect.objectContaining({ milestoneEnabled: true, milestoneDays: [500, 1000] }));
+    expect(createAnniversary).toHaveBeenCalledWith(expect.objectContaining({ icon: 'plane', milestoneEnabled: true, milestoneDays: [500, 1000] }));
     await waitFor(() => expect(onBack).toHaveBeenCalled());
   });
 
   it('loads milestone settings in an existing editor and preserves them on update', async () => {
-    const existing = record(localTodayKey(), [500, 1000]);
+    const existing = { ...record(localTodayKey(), [500, 1000]), icon: 'camera' as const };
     const onBack = vi.fn();
     listAnniversaries.mockResolvedValue([existing]);
     updateAnniversary.mockResolvedValue({ ...existing, milestoneDays: [1000] });
     render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'editor', anniversaryRecordId: existing.id }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={onBack} onReturnHome={vi.fn()} onError={vi.fn()}/>);
     await waitFor(() => expect((screen.getByRole('checkbox', { name: '天数纪念' }) as HTMLInputElement).checked).toBe(true));
+    expect(screen.getByRole('radio', { name: '选择图标：相机' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('radio', { name: '选择图标：礼物' }));
     expect(screen.getByRole('button', { name: '删除 500 天节点' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '删除 500 天节点' }));
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(updateAnniversary).toHaveBeenCalledWith(existing.id, expect.objectContaining({ milestoneEnabled: true, milestoneDays: [1000] }));
+    expect(updateAnniversary).toHaveBeenCalledWith(existing.id, expect.objectContaining({ icon: 'gift', milestoneEnabled: true, milestoneDays: [1000] }));
     await waitFor(() => expect(onBack).toHaveBeenCalled());
+  });
+
+  it('does not save a changed icon when editing is cancelled', async () => {
+    const existing = { ...record(localTodayKey(), []), icon: 'music' as const };
+    const onBack = vi.fn();
+    listAnniversaries.mockResolvedValue([existing]);
+    render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'editor', anniversaryRecordId: existing.id }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={onBack} onReturnHome={vi.fn()} onError={vi.fn()}/>);
+    await screen.findByRole('radio', { name: '选择图标：音乐' });
+    fireEvent.click(screen.getByRole('radio', { name: '选择图标：蛋糕' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(updateAnniversary).not.toHaveBeenCalled();
+    expect(onBack).toHaveBeenCalled();
   });
 
   it('shows inclusive current day, today node, next countdown and calculated node date in detail', async () => {
     const today = localTodayKey();
-    const existing = record(today, [1, 500]);
+    const existing = { ...record(today, [1, 500]), icon: 'star' as const };
     listAnniversaries.mockResolvedValue([existing]);
     render(<AnniversaryModule snapshot={{ ...initialSnapshot('anniversary'), anniversaryScreen: 'detail', anniversaryRecordId: existing.id }} active onScreen={vi.fn()} onSurface={vi.fn()} onBack={vi.fn()} onReturnHome={vi.fn()} onError={vi.fn()}/>);
     expect(await screen.findByText('相伴第 1 天')).toBeTruthy();
+    expect(document.querySelector('.anniversary-detail-icon [aria-label="星星"]')).toBeTruthy();
     const milestoneEvent = document.querySelector('.anniversary-milestone-next');
     expect(milestoneEvent?.textContent).toContain('第 1 天');
     expect(milestoneEvent?.textContent).toContain('就是今天');

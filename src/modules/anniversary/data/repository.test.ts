@@ -19,7 +19,7 @@ describe('Anniversary repository', () => {
     const yearly = await createAnniversary({ title: '  相识日  ', date: '2024-06-24', recurrence: 'yearly' });
     const once = await createAnniversary({ title: '旅行', date: '2024-06-24', recurrence: 'once' });
     expect(yearly.title).toBe('相识日');
-    expect(yearly).toMatchObject({ milestoneEnabled: false, milestoneDays: [] });
+    expect(yearly).toMatchObject({ icon: 'heart', milestoneEnabled: false, milestoneDays: [] });
     expect(yearly.id).not.toBe(once.id);
     expect(await listAnniversaries()).toHaveLength(2);
   });
@@ -33,19 +33,43 @@ describe('Anniversary repository', () => {
     await expect(createAnniversary({ title: '日期边界', date: '9999-12-31', recurrence: 'once', milestoneDays: [2] })).rejects.toThrow('不能超过 1 天');
   });
 
-  it('reads v6 records written before the milestone fields existed without rewriting them', async () => {
+  it('reads old records without migration and fills the default icon on save', async () => {
     const legacy = { id: 'legacy-v6', title: '旧版纪念日', date: '2024-02-29', recurrence: 'yearly', createdAt: '2024-02-29T00:00:00.000Z', updatedAt: '2024-02-29T00:00:00.000Z' };
     const db = await openDatabase();
     const tx = db.transaction('anniversaryRecords', 'readwrite');
     tx.objectStore('anniversaryRecords').put(legacy);
     await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
-    expect(await listAnniversaries()).toEqual([{ ...legacy, milestoneEnabled: false, milestoneDays: [] }]);
+    expect(await listAnniversaries()).toEqual([{ ...legacy, icon: 'heart', milestoneEnabled: false, milestoneDays: [] }]);
     expect(db.version).toBe(6);
     expect(await new Promise<unknown>((resolve, reject) => {
       const request = db.transaction('anniversaryRecords', 'readonly').objectStore('anniversaryRecords').get(legacy.id);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     })).toEqual(legacy);
+    const updated = await updateAnniversary(legacy.id, { title: legacy.title, date: legacy.date, recurrence: 'yearly' });
+    expect(updated.icon).toBe('heart');
+    expect(await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const request = db.transaction('anniversaryRecords', 'readonly').objectStore('anniversaryRecords').get(legacy.id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    })).toMatchObject({ icon: 'heart' });
+    db.close();
+  });
+
+  it('persists valid icons, preserves them on unrelated updates, and safely reads unknown stored keys', async () => {
+    const created = await createAnniversary({ title: '旅行', icon: 'plane', date: '2026-10-18', recurrence: 'once' });
+    expect(created.icon).toBe('plane');
+    expect((await listAnniversaries())[0].icon).toBe('plane');
+    expect((await updateAnniversary(created.id, { title: '旅行更新', date: created.date, recurrence: created.recurrence })).icon).toBe('plane');
+    expect((await updateAnniversary(created.id, { title: '旅行更新', icon: 'camera', date: created.date, recurrence: created.recurrence })).icon).toBe('camera');
+    await expect(createAnniversary({ title: '非法图标', icon: 'unknown' as 'heart', date: '2026-10-18', recurrence: 'once' })).rejects.toThrow('有效的纪念日图标');
+
+    const db = await openDatabase();
+    const tx = db.transaction('anniversaryRecords', 'readwrite');
+    tx.objectStore('anniversaryRecords').put({ ...created, id: 'unknown-icon', icon: 'not-in-catalog' });
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    expect((await listAnniversaries()).find(({ id }) => id === 'unknown-icon')?.icon).toBe('heart');
+    expect(db.version).toBe(6);
     db.close();
   });
 

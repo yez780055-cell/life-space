@@ -2,8 +2,9 @@ import type { AnniversaryDraft, AnniversaryRecord } from '../types';
 import { isValidDateKey } from '../domain/date';
 import { normalizeMilestoneDays } from '../domain/milestones';
 import { openDatabase } from '../../../shared/storage/database';
+import { DEFAULT_ANNIVERSARY_ICON, isAnniversaryIconKey, normalizeAnniversaryIcon } from '../icons';
 
-type NormalizedAnniversaryDraft = Omit<AnniversaryDraft, 'milestoneEnabled' | 'milestoneDays'> & Pick<AnniversaryRecord, 'milestoneEnabled' | 'milestoneDays'>;
+type NormalizedAnniversaryDraft = Omit<AnniversaryDraft, 'icon' | 'milestoneEnabled' | 'milestoneDays'> & Partial<Pick<AnniversaryRecord, 'icon'>> & Pick<AnniversaryRecord, 'milestoneEnabled' | 'milestoneDays'>;
 
 function normalizeDraft(draft: AnniversaryDraft): NormalizedAnniversaryDraft {
   const title = typeof draft.title === 'string' ? draft.title.trim() : '';
@@ -11,6 +12,7 @@ function normalizeDraft(draft: AnniversaryDraft): NormalizedAnniversaryDraft {
   if (!title) throw new Error('请填写纪念日名称。');
   if (!isValidDateKey(draft.date)) throw new Error('请选择有效日期。');
   if (draft.recurrence !== 'yearly' && draft.recurrence !== 'once') throw new Error('请选择纪念日类型。');
+  if (draft.icon !== undefined && !isAnniversaryIconKey(draft.icon)) throw new Error('请选择有效的纪念日图标。');
   if (draft.milestoneEnabled !== undefined && typeof draft.milestoneEnabled !== 'boolean') throw new Error('天数纪念开关设置无效。');
   const milestoneEnabled = draft.milestoneEnabled ?? false;
   const milestoneDays = normalizeMilestoneDays(draft.milestoneDays ?? [], draft.date);
@@ -18,6 +20,7 @@ function normalizeDraft(draft: AnniversaryDraft): NormalizedAnniversaryDraft {
     title,
     date: draft.date,
     recurrence: draft.recurrence,
+    ...(draft.icon ? { icon: draft.icon } : {}),
     ...(note ? { note } : {}),
     milestoneEnabled,
     milestoneDays
@@ -29,7 +32,7 @@ function normalizeStoredRecord(value: AnniversaryRecord): AnniversaryRecord {
   let milestoneDays: number[] = [];
   try { milestoneDays = normalizeMilestoneDays(value.milestoneDays ?? [], value.date); }
   catch { /* Ignore invalid legacy extension fields without rewriting the stored record. */ }
-  return { ...value, milestoneEnabled, milestoneDays };
+  return { ...value, icon: normalizeAnniversaryIcon(value.icon), milestoneEnabled, milestoneDays };
 }
 
 function storageError(error: unknown, fallback: string): Error {
@@ -73,7 +76,7 @@ export async function listAnniversaries(): Promise<AnniversaryRecord[]> {
 export async function createAnniversary(draft: AnniversaryDraft): Promise<AnniversaryRecord> {
   const normalized = normalizeDraft(draft);
   const now = new Date().toISOString();
-  const record: AnniversaryRecord = { id: crypto.randomUUID(), ...normalized, createdAt: now, updatedAt: now };
+  const record: AnniversaryRecord = { id: crypto.randomUUID(), ...normalized, icon: normalized.icon ?? DEFAULT_ANNIVERSARY_ICON, createdAt: now, updatedAt: now };
   try {
     const db = await openDatabase();
     const tx = db.transaction('anniversaryRecords', 'readwrite');
@@ -97,7 +100,7 @@ export async function updateAnniversary(id: string, draft: AnniversaryDraft): Pr
     request.onsuccess = () => {
       const current = request.result as AnniversaryRecord | undefined;
       if (!current) { failed = new Error('找不到要编辑的纪念日。'); tx.abort(); return; }
-      updated = { ...current, ...normalized, id: current.id, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
+      updated = { ...current, ...normalized, icon: normalized.icon ?? normalizeAnniversaryIcon(current.icon), id: current.id, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
       store.put(updated);
     };
     request.onerror = () => { failed = new Error('读取纪念日失败，请检查设备存储。'); tx.abort(); };
