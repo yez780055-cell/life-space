@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Life Space Test</string>
-    <string name="title_activity_main">Life Space Test</string>
+    <string name="app_name">Life Space</string>
+    <string name="title_activity_main">Life Space</string>
     <string name="package_name">com.lifespace.foundation.test</string>
     <string name="custom_url_scheme">com.lifespace.foundation.test</string>
 </resources>
