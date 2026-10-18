@@ -1,5 +1,5 @@
 export type DateKey = `${number}-${number}-${number}`;
-export type CompletionSource = 'manual' | 'subtasks';
+export type CompletionSource = 'manual';
 export type RepeatFrequency = 'daily' | 'weekly' | 'monthly';
 
 export type RecurrenceRule = {
@@ -16,7 +16,6 @@ export type ReminderSettings = {
   minutesBefore: number;
 };
 
-export type PersonalSubtask = { id: string; title: string; checked: boolean };
 export type PersonalTag = { id: string; name: string; normalizedName: string; color: string | null; createdAt: number };
 
 export type PersonalTask = {
@@ -26,7 +25,6 @@ export type PersonalTask = {
   scheduledDate: DateKey | null;
   scheduledTime: string | null;
   tags: string[];
-  subtasks: PersonalSubtask[];
   createdAt: number;
   updatedAt: number;
   completedAt: number | null;
@@ -40,7 +38,7 @@ export type PersonalTask = {
 };
 
 export type TaskOverride = Partial<Pick<PersonalTask,
-  'title' | 'note' | 'scheduledDate' | 'scheduledTime' | 'tags' | 'subtasks' | 'reminder'
+  'title' | 'note' | 'scheduledDate' | 'scheduledTime' | 'tags' | 'reminder'
 >>;
 
 export type TaskOccurrence = {
@@ -52,7 +50,6 @@ export type TaskOccurrence = {
   scheduledDate: DateKey;
   completedAt: number | null;
   completionSource: CompletionSource | null;
-  subtaskChecks: Record<string, boolean>;
   override: TaskOverride;
   skipped: boolean;
   updatedAt: number;
@@ -67,7 +64,6 @@ export type TaskInstance = {
   scheduledDate: DateKey | null;
   scheduledTime: string | null;
   tags: string[];
-  subtasks: PersonalSubtask[];
   completedAt: number | null;
   completionSource: CompletionSource | null;
   recurrence: RecurrenceRule | null;

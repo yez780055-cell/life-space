@@ -5,7 +5,7 @@ import { allInstances, nextOccurrenceDate } from './recurrence';
 function task(overrides: Partial<PersonalTask> = {}): PersonalTask {
   return {
     id: 'task', title: '任务', note: '旧备注', scheduledDate: '2026-10-01', scheduledTime: null,
-    tags: ['old-tag'], subtasks: [{ id: 'old-subtask', title: '旧子任务', checked: false }],
+    tags: ['old-tag'],
     createdAt: 1, updatedAt: 1, completedAt: null, completionSource: null,
     recurrence: null, recurrenceHistory: [], seriesId: null,
     reminder: { enabled: false, minutesBefore: 10 }, ...overrides
@@ -19,7 +19,7 @@ function dailyRule(startsOn: RecurrenceRule['startsOn'] = '2020-01-01'): Recurre
 function occurrence(taskId: string, periodDate: TaskOccurrence['periodDate'], overrides: Partial<TaskOccurrence> = {}): TaskOccurrence {
   return {
     key: `${taskId}:${periodDate}`, taskId, periodDate, scheduledDate: periodDate,
-    completedAt: null, completionSource: null, subtaskChecks: {}, override: {}, skipped: false,
+    completedAt: null, completionSource: null, override: {}, skipped: false,
     updatedAt: 2, ...overrides
   };
 }
@@ -52,7 +52,6 @@ describe('all personal task projection', () => {
     expect(all.find((item) => item.instanceKey === 'daily:2026-10-14')?.completedAt).toBe(4);
     expect(all.find((item) => item.instanceKey === 'daily:2026-10-13')).toMatchObject({ title: '改期保留', scheduledDate: '2026-10-18' });
     expect(daily.completedAt).toBeNull();
-    expect(daily.subtasks[0].checked).toBe(false);
   });
 
   it('advances past completed or skipped current cycles without duplicating their records', () => {
