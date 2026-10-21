@@ -762,5 +762,5 @@
 .period-dialog{max-height:min(calc(var(--app-viewport-height,100dvh) - 24px),780px);scroll-padding-block:24px}
 .anniversary-form,.todo-editor-scroll,.todo-minimal-editor-fields{scroll-padding-block:24px}
 input,textarea,select{scroll-margin-block:24px}
-@media(max-width:700px){.main-area{height:var(--app-viewport-height,100dvh)}.module-holder{height:calc(var(--app-viewport-height,100dvh) - 70px - var(--safe-top) - 72px - var(--safe-bottom))}.settings-page{height:calc(var(--app-viewport-height,100dvh) - 70px - var(--safe-top) - 72px - var(--safe-bottom))}}
+@media(max-width:700px){.main-area{height:var(--app-viewport-height,100dvh)}.module-holder{height:calc(var(--app-viewport-height,100dvh) - 70px - var(--safe-top) - 72px - var(--safe-bottom))}.settings-page{height:calc(var(--app-viewport-height,100dvh) - 70px - var(--safe-top) - 72px - var(--safe-bottom))}.anniversary-overlay{height:calc(var(--app-viewport-height,100dvh) - 72px - var(--safe-bottom))}}
 html.native-android *{-webkit-tap-highlight-color:transparent}
