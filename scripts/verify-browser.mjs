@@ -10,6 +10,29 @@ await mkdir(screenshotDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, ...(process.env.LIFE_SPACE_CHROMIUM_PATH ? { executablePath: process.env.LIFE_SPACE_CHROMIUM_PATH } : {}), args: ['--no-sandbox'] });
 const shot = (page, name) => page.screenshot({ path: join(screenshotDir, name), fullPage: true });
 
+async function waitForViewportLayout(page, selector) {
+  const snapshotKey = 'verifyViewportLayoutSnapshot';
+  await page.evaluate((key) => { delete document.documentElement.dataset[key]; }, snapshotKey);
+  await page.waitForFunction(({ targetSelector, key }) => {
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const cssViewportHeight = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height'));
+    if (!Number.isFinite(cssViewportHeight) || Math.abs(cssViewportHeight - viewportHeight) > 1) return false;
+
+    const editor = document.querySelector(targetSelector);
+    if (!editor) return false;
+    const fields = editor.querySelector('.todo-minimal-editor-fields');
+    const save = editor.querySelector('footer button[type="submit"]');
+    const values = [editor.getBoundingClientRect().top, editor.getBoundingClientRect().bottom,
+      fields?.getBoundingClientRect().height ?? 0, fields?.clientHeight ?? 0,
+      save?.getBoundingClientRect().top ?? 0, save?.getBoundingClientRect().bottom ?? 0];
+    const snapshot = JSON.stringify(values.map((value) => Math.round(value * 100) / 100));
+    if (document.documentElement.dataset[key] === snapshot) return true;
+    document.documentElement.dataset[key] = snapshot;
+    return false;
+  }, { targetSelector: selector, key: snapshotKey });
+  await page.evaluate((key) => { delete document.documentElement.dataset[key]; }, snapshotKey);
+}
+
 function dateOrdinal(dateKey) {
   const [year, month, day] = dateKey.split('-').map(Number);
   const previousYear = year - 1;
@@ -403,6 +426,7 @@ try {
   await saveEditor.getByLabel('添加标签').fill('运营');
   await saveEditor.getByRole('button', { name: '添加', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 360 });
+  await waitForViewportLayout(page, '.todo-minimal-editor');
   const editMetrics = await saveEditor.evaluate((element) => {
     const fields = element.querySelector('.todo-minimal-editor-fields');
     const save = element.querySelector('footer button[type="submit"]');
@@ -1001,6 +1025,7 @@ try {
   await mobileEditor.evaluate(async (element) => {
     await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
   });
+  await waitForViewportLayout(mobilePage, '.todo-minimal-editor');
   const mobileEditorMetrics = await mobileEditor.evaluate((element) => {
     const fields = element.querySelector('.todo-minimal-editor-fields');
     const save = element.querySelector('footer button[type="submit"]')?.getBoundingClientRect();
