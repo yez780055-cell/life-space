@@ -72,6 +72,35 @@ export default function App() {
   const [error, setError] = useState('');
   const onError = useCallback((message: string) => setError(message), []);
   useEffect(() => {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    const syncViewport = () => {
+      root.style.setProperty('--app-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+      root.style.setProperty('--app-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+    };
+    const revealFocusedField = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.matches('input, textarea, select')) {
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    };
+    const onViewportResize = () => {
+      syncViewport();
+      window.requestAnimationFrame(revealFocusedField);
+    };
+    syncViewport();
+    viewport?.addEventListener('resize', onViewportResize);
+    viewport?.addEventListener('scroll', syncViewport);
+    window.addEventListener('resize', onViewportResize);
+    return () => {
+      root.style.removeProperty('--app-viewport-height');
+      root.style.removeProperty('--app-viewport-top');
+      viewport?.removeEventListener('resize', onViewportResize);
+      viewport?.removeEventListener('scroll', syncViewport);
+      window.removeEventListener('resize', onViewportResize);
+    };
+  }, []);
+  useEffect(() => {
     let active = true;
     loadLastModule().then((module) => { if (active) setStartModule(module); }).catch(() => { if (active) { setError('无法读取本地设置。本次将从待办开始；请检查设备存储。'); setStartModule('todo'); } });
     return () => { active = false; };
