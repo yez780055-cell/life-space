@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { App as NativeApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
 import { initialSnapshot, openGuide, openSurface, switchModule, type AnniversaryScreen, type NavigationSnapshot, type Surface, type PeriodScreen, type TodoScreen, type TodoSpace } from './model';
 import { saveLastModule, type ModuleId } from '../../shared/storage/settings';
 
 const HISTORY_KEY = '__lifeSpaceFoundation';
-const EXIT_WINDOW_MS = 1800;
 
 type HistoryEntry = { [HISTORY_KEY]: string; depth: number; epoch: number; snapshot: NavigationSnapshot };
 
@@ -15,7 +12,6 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
     const previous = history.state as HistoryEntry | null;
     return !(previous?.[HISTORY_KEY] && previous.depth > 0);
   });
-  const [exitHint, setExitHint] = useState(false);
   const id = useRef(crypto.randomUUID());
   const depth = useRef(0);
   const epoch = useRef(0);
@@ -24,14 +20,12 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   const pendingTraversal = useRef(false);
   const guardBounce = useRef(false);
   const todoSpaceForward = useRef(false);
-  const lastExit = useRef(0);
   const bootStarted = useRef(false);
 
   const setCurrent = useCallback((next: NavigationSnapshot) => {
     current.current = next;
     setSnapshot(next);
   }, []);
-  const resetExit = useCallback(() => { lastExit.current = 0; setExitHint(false); }, []);
   const entry = useCallback((next: NavigationSnapshot, nextDepth: number): HistoryEntry => ({ [HISTORY_KEY]: id.current, depth: nextDepth, epoch: epoch.current, snapshot: next }), []);
   const canLeaveCurrent = useCallback(() => {
     const event = new Event('life-space-navigation-back', { cancelable: true });
@@ -163,14 +157,13 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
   }, [canLeaveCurrent, commitTab, entry, setCurrent]);
 
   const push = useCallback((next: NavigationSnapshot) => {
-    resetExit();
     todoSpaceForward.current = false;
     depth.current += 1;
     history.pushState(entry(next, depth.current), '');
     setCurrent(next);
-  }, [entry, resetExit, setCurrent]);
+  }, [entry, setCurrent]);
 
-  const back = useCallback(async () => {
+  const back = useCallback(() => {
     if (!canLeaveCurrent()) return;
     if (depth.current > 0) {
       if (pendingTraversal.current) return;
@@ -183,31 +176,12 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       todoSpaceForward.current = false;
       history.replaceState(entry(personal, 0), '');
       setCurrent(personal);
-      return;
     }
-    if (!Capacitor.isNativePlatform()) return;
-    const now = Date.now();
-    if (now - lastExit.current < EXIT_WINDOW_MS) { await NativeApp.exitApp(); return; }
-    lastExit.current = now;
-    setExitHint(true);
-    window.setTimeout(() => setExitHint(false), EXIT_WINDOW_MS);
   }, [canLeaveCurrent, entry, setCurrent]);
-
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
-    let disposed = false;
-    let listener: { remove: () => Promise<void> } | undefined;
-    NativeApp.addListener('backButton', () => { void back(); }).then((handle) => {
-      if (disposed) void handle.remove();
-      else listener = handle;
-    }).catch(() => onError('Android 返回键暂不可用'));
-    return () => { disposed = true; void listener?.remove(); };
-  }, [back, onError]);
 
   const selectModule = useCallback((module: ModuleId) => {
     if (module === current.current.module && current.current.surfaces.length === 0) return;
     if (!canLeaveCurrent()) return;
-    resetExit();
     if (pendingTab.current || pendingTraversal.current) return;
     todoSpaceForward.current = false;
     // Return to the app's root history entry before replacing the active tab.
@@ -218,14 +192,13 @@ export function useNavigation(startModule: ModuleId, onError: (message: string) 
       commitTab(module, current.current.pages, current.current);
     }
     void saveLastModule(module).catch(() => onError('无法保存上次打开的空间，请检查设备存储'));
-  }, [canLeaveCurrent, commitTab, onError, resetExit]);
+  }, [canLeaveCurrent, commitTab, onError]);
 
   return {
-    snapshot, historyReady, exitHint, selectModule,
+    snapshot, historyReady, selectModule,
     showGuide: () => push(openGuide(current.current)),
     showTodoSpace: (space: TodoSpace) => {
       if (current.current.module !== 'todo' || current.current.todoSpace === space || current.current.todoScreen !== 'home' || current.current.surfaces.length > 0 || pendingTraversal.current) return;
-      resetExit();
       if (space === 'couple' && todoSpaceForward.current) {
         todoSpaceForward.current = false;
         if (pendingTraversal.current) return;

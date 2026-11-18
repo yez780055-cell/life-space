@@ -7,7 +7,6 @@ import { todoContent } from '../../modules/todo';
 import { periodContent } from '../../modules/period';
 import { anniversaryContent } from '../../modules/anniversary';
 import { SettingsPage } from '../settings/SettingsPage';
-import { isAndroidApp } from '../../shared/platform/platform';
 import { TodoModule } from '../../modules/todo/TodoModule';
 import { PeriodModule } from '../../modules/period/PeriodModule';
 import { AnniversaryModule } from '../../modules/anniversary/AnniversaryModule';
@@ -46,7 +45,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ReadyApp({ startModule, onError }: { startModule: ModuleId; onError: (message: string) => void }) {
-  const { snapshot, historyReady, exitHint, selectModule, showGuide, showSurface, showTodoSpace, showTodoScreen, showPeriodScreen, showAnniversaryScreen, returnAnniversaryHome, back } = useNavigation(startModule, onError);
+  const { snapshot, historyReady, selectModule, showGuide, showSurface, showTodoSpace, showTodoScreen, showPeriodScreen, showAnniversaryScreen, returnAnniversaryHome, back } = useNavigation(startModule, onError);
   const isSettings = snapshot.surfaces.includes('settings');
   const isAbout = snapshot.surfaces.at(-1) === 'about';
   const isAnniversaryDeleteOpen = snapshot.module === 'anniversary' && snapshot.surfaces.at(-1) === 'anniversary-delete';
@@ -62,8 +61,6 @@ function ReadyApp({ startModule, onError }: { startModule: ModuleId; onError: (m
       <nav className={`bottom-nav ${isAnniversaryDeleteOpen ? 'anniversary-nav-on-top' : ''}`} aria-label="主要导航" inert={isSettings}>{MODULES.map((id) => <button key={id} className={snapshot.module === id ? 'active' : ''} onClick={() => selectModule(id)} aria-current={snapshot.module === id ? 'page' : undefined}><Icon name={id}/><span>{content[id].title}</span></button>)}</nav>
     </main>
     {isAbout && <AboutDialog onClose={() => void back()}/>}
-    {exitHint && <div className="toast" role="status">再按一次返回键退出测试版</div>}
-    {isAndroidApp() && <span className="sr-only">Android 测试版本</span>}
   </div>;
 }
 
@@ -71,6 +68,35 @@ export default function App() {
   const [startModule, setStartModule] = useState<ModuleId | null>(null);
   const [error, setError] = useState('');
   const onError = useCallback((message: string) => setError(message), []);
+  useEffect(() => {
+    const root = document.documentElement;
+    const viewport = window.visualViewport;
+    const syncViewport = () => {
+      root.style.setProperty('--app-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+      root.style.setProperty('--app-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+    };
+    const revealFocusedField = () => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.matches('input, textarea, select')) {
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    };
+    const onViewportResize = () => {
+      syncViewport();
+      window.requestAnimationFrame(revealFocusedField);
+    };
+    syncViewport();
+    viewport?.addEventListener('resize', onViewportResize);
+    viewport?.addEventListener('scroll', syncViewport);
+    window.addEventListener('resize', onViewportResize);
+    return () => {
+      root.style.removeProperty('--app-viewport-height');
+      root.style.removeProperty('--app-viewport-top');
+      viewport?.removeEventListener('resize', onViewportResize);
+      viewport?.removeEventListener('scroll', syncViewport);
+      window.removeEventListener('resize', onViewportResize);
+    };
+  }, []);
   useEffect(() => {
     let active = true;
     loadLastModule().then((module) => { if (active) setStartModule(module); }).catch(() => { if (active) { setError('无法读取本地设置。本次将从待办开始；请检查设备存储。'); setStartModule('todo'); } });

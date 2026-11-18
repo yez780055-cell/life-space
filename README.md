@@ -1,6 +1,6 @@
 # Life Space
 
-Life Space 是 React 19、TypeScript、Vite 和 Capacitor 7 构建的个人生活 App。个人待办目前采用极简流程；本阶段只交付网页，不构建 APK。
+Life Space 是用 React 19、TypeScript 和 Vite 构建的个人生活 PWA。
 
 ## 本地运行与检查
 
@@ -46,4 +46,4 @@ GitHub Pages 使用 Vite 的 `/life-space/` 子路径。Playwright 检查该子�
 
 ## 范围
 
-Life Space 当前没有已连接的后端或账号流程；Todo、Couple、Period 和 Anniversary 数据按各自的数据域保存在当前设备。Anniversary V1 不含跨设备同步、提醒、照片、标签、统计或 Android APK。Android 真机验收和正式发布另行安排。
+Life Space 当前没有已连接的后端或账号流程；Todo、Couple、Period 和 Anniversary 数据按各自的数据域保存在当前设备。Anniversary V1 不含跨设备同步、提醒、照片、标签或统计。
