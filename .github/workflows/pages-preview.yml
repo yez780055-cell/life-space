@@ -1,8 +1,8 @@
-name: Todo Phase 2B Web preview
+name: GitHub Pages deployment
 
 on:
   push:
-    branches: [feat/todo-phase-2b]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -23,10 +23,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Record preview source
+      - name: Record deployment source
         run: |
-          echo "Preview branch: $GITHUB_REF_NAME"
-          echo "Preview commit: $GITHUB_SHA"
+          echo "Deployment branch: $GITHUB_REF_NAME"
+          echo "Deployment commit: $GITHUB_SHA"
       - run: npm ci
       - run: npm run build
       - uses: actions/upload-pages-artifact@v4
